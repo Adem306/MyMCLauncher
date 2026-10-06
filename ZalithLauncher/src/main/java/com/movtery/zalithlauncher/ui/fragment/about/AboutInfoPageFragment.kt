@@ -162,6 +162,29 @@ class AboutInfoPageFragment() : Fragment(R.layout.fragment_about_info_page) {
                 )
             )
         )
+        mAboutData.add(
+            AboutItemBean(
+                resources.getDrawable(R.drawable.image_about_adem306, requireContext().theme),
+                "Adem306",
+                "المطوّر Adem306",
+                AboutItemButtonBean(requireActivity(), "Github", "https://github.com/Adem306")
+            )
+        )
+        mAboutData.add(
+            AboutItemBean(
+                resources.getDrawable(R.drawable.image_about_mohammad059, requireContext().theme),
+                "Mohammad059",
+                "المطوّر اللي ما عمل حاجة",
+                null
+            )
+        )
+        mAboutData.add(
+            AboutItemBean(
+                resources.getDrawable(R.drawable.image_about_claude, requireContext().theme),
+                "Claude",
+                "مساعد ذكاء اصطناعي من Anthropic",
+                AboutItemButtonBean(requireActivity(), "Website", "https://claude.ai")
+            )
+        )
     }
 }
-
