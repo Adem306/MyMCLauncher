@@ -233,6 +233,13 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                     closeMultiSelect()
                     fileRecyclerView.refreshPath()
                 }
+
+                // long press on refresh: re-check every mod that has no icon (inside the jar or online)
+                refreshButton.setOnLongClickListener {
+                    closeMultiSelect()
+                    fileRecyclerView.adapter.refreshModIcons(requireContext(), true)
+                    true
+                }
             }
 
             goDownloadText.setOnClickListener{ goDownloadMod() }
@@ -347,4 +354,3 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
         }
     }
 }
-
