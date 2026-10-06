@@ -44,6 +44,10 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
     private static final ExecutorService ICON_EXECUTOR = Executors.newFixedThreadPool(2);
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final byte[] NO_ICON = new byte[0];
+
+    // Size of the mod icon in dp. Change this number to make the icons bigger or smaller
+    // (36 = smaller, 44 = default, 52 = bigger, 60 = very big).
+    private static final int MOD_ICON_SIZE_DP = 44;
     private static final LruCache<String, byte[]> ICON_CACHE = new LruCache<String, byte[]>(4 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, byte[] value) {
@@ -203,6 +207,7 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         // original look of the image view, so we can restore it for non-mod rows
         private final ImageView.ScaleType origScaleType;
         private final int origPadLeft, origPadTop, origPadRight, origPadBottom;
+        private final int origWidth, origHeight;
         // identifies the mod icon request that is allowed to update this holder
         private String boundKey = null;
 
@@ -216,6 +221,9 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             origPadTop = binding.image.getPaddingTop();
             origPadRight = binding.image.getPaddingRight();
             origPadBottom = binding.image.getPaddingBottom();
+            ViewGroup.LayoutParams imageParams = binding.image.getLayoutParams();
+            origWidth = imageParams != null ? imageParams.width : ViewGroup.LayoutParams.WRAP_CONTENT;
+            origHeight = imageParams != null ? imageParams.height : ViewGroup.LayoutParams.WRAP_CONTENT;
 
             binding.check.setOnClickListener(v -> {
                 if (isMultiSelectMode) {
@@ -301,11 +309,26 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         private void restoreImageStyle() {
             binding.image.setScaleType(origScaleType);
             binding.image.setPadding(origPadLeft, origPadTop, origPadRight, origPadBottom);
+            setImageSize(origWidth, origHeight);
+        }
+
+        private void setImageSize(int width, int height) {
+            ViewGroup.LayoutParams params = binding.image.getLayoutParams();
+            if (params != null && (params.width != width || params.height != height)) {
+                params.width = width;
+                params.height = height;
+                binding.image.setLayoutParams(params);
+            }
+        }
+
+        private int modIconPx() {
+            return (int) (MOD_ICON_SIZE_DP * context.getResources().getDisplayMetrics().density + 0.5f);
         }
 
         private void bindModIcon(File file, FileItemBean bean) {
             // show the default icon first, replace it if the mod has its own logo
             restoreImageStyle();
+            setImageSize(modIconPx(), modIconPx()); // same size for every mod row, so the list does not jump
             Glide.with(context).clear(binding.image);
             binding.image.setImageDrawable(bean.image);
 
@@ -336,10 +359,8 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             binding.image.setPadding(0, 0, 0, 0);
             binding.image.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
-            int px = binding.image.getWidth();
-            if (px <= 0) {
-                px = (int) (48 * context.getResources().getDisplayMetrics().density);
-            }
+            setImageSize(modIconPx(), modIconPx());
+            int px = modIconPx();
             Glide.with(context).load(data)
                     .override(px, px)
                     .centerCrop()
