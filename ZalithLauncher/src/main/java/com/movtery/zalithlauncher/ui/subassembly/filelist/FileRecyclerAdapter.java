@@ -237,13 +237,47 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         return index > 0 && index < 60;
     }
 
+    private static String entryHead(String line) {
+        return line.substring(0, Math.min(line.length(), 80));
+    }
+
     private static boolean isErrorEntry(String line) {
-        String head = line.substring(0, Math.min(line.length(), 80));
+        String head = entryHead(line);
         return head.contains("/ERROR]") || head.contains("/FATAL]");
     }
 
+    private static boolean isWarnEntry(String line) {
+        return entryHead(line).contains("/WARN]");
+    }
+
+    // a WARN entry is kept only if it contains one of these words...
+    private static final String[] WARN_INCLUDE = {"Exception", "Caused by", "MalformedJson", "rejected"};
+    // ...and none of these (very common harmless warnings of mods that are not installed)
+    private static final String[] WARN_EXCLUDE = {"Error loading class", "@Mixin target", "Reference map", "ClassNotFoundException"};
+
+    private static boolean containsAny(String text, String[] words) {
+        for (String word : words) {
+            if (text.contains(word)) return true;
+        }
+        return false;
+    }
+
+    /** kind: 1 = ERROR / FATAL entry (always kept), 2 = WARN entry (kept only if it looks like a real problem) */
+    private static void flushEntry(StringBuilder out, StringBuilder entry, int kind) {
+        if (kind == 0 || entry.length() == 0) return;
+        if (kind == 1) {
+            out.append(entry);
+            return;
+        }
+        String text = entry.toString();
+        if (containsAny(text, WARN_INCLUDE) && !containsAny(text, WARN_EXCLUDE)) {
+            out.append(text);
+        }
+    }
+
     /**
-     * Log: every ERROR / FATAL entry with everything that belongs to it (stack trace, "Caused by"...).
+     * Log: every ERROR / FATAL entry, plus the WARN entries that contain an exception or a similar real problem,
+     * with everything that belongs to them (stack trace, "Caused by"...).
      * Crash report: the top part, which has the reason of the crash and the stack trace.
      */
     private static String extractErrors(String text) {
@@ -258,13 +292,17 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             return sb.toString().trim();
         }
 
-        boolean inError = false;
+        StringBuilder entry = new StringBuilder();
+        int kind = 0;
         for (String line : lines) {
             if (isLogEntryStart(line)) {
-                inError = isErrorEntry(line);
+                flushEntry(sb, entry, kind);
+                entry.setLength(0);
+                kind = isErrorEntry(line) ? 1 : (isWarnEntry(line) ? 2 : 0);
             }
-            if (inError) sb.append(line).append('\n');
+            if (kind != 0) entry.append(line).append('\n');
         }
+        flushEntry(sb, entry, kind);
         return sb.toString().trim();
     }
 
