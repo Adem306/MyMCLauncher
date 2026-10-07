@@ -657,4 +657,125 @@ public final class ModIconStore {
         for (byte b : bytes) sb.append(String.format(Locale.ROOT, "%02x", b));
         return sb.toString();
     }
+
+    /**
+     * Finds the exact Modrinth project ID for this mod JAR using its SHA-1.
+     * Returns null when the file is not found on Modrinth.
+     */
+    public static String findModrinthProjectId(File file) {
+        if (file == null || !file.isFile() || !isModJar(file)) {
+            return null;
+        }
+
+        try {
+            String hash = hex(fileSha1(file));
+
+            JSONObject body = new JSONObject();
+            JSONArray hashes = new JSONArray();
+            hashes.put(hash);
+            body.put("hashes", hashes);
+            body.put("algorithm", "sha1");
+
+            JSONObject versions = new JSONObject(
+                    post(
+                            "https://api.modrinth.com/v2/version_files",
+                            body.toString(),
+                            null
+                    )
+            );
+
+            JSONObject version = versions.optJSONObject(hash);
+            if (version == null) {
+                return null;
+            }
+
+            String projectId = str(version, "project_id");
+
+            if (projectId == null || projectId.isEmpty()) {
+                return null;
+            }
+
+            return projectId;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * Finds the exact CurseForge mod ID for this mod JAR using its fingerprint.
+     * Returns null when the file is not found on CurseForge.
+     */
+    public static Long findCurseForgeModId(File file) {
+        if (file == null || !file.isFile() || !isModJar(file)) {
+            return null;
+        }
+
+        String apiKey = InfoDistributor.CURSEFORGE_API_KEY;
+
+        if (apiKey == null
+                || apiKey.trim().isEmpty()
+                || "DUMMY".equals(apiKey.trim())) {
+            return null;
+        }
+
+        try {
+            long fingerprint = curseFingerprint(file);
+
+            JSONObject body = new JSONObject();
+            JSONArray fingerprints = new JSONArray();
+            fingerprints.put(fingerprint);
+            body.put("fingerprints", fingerprints);
+
+            JSONObject root = new JSONObject(
+                    post(
+                            "https://api.curseforge.com/v1/fingerprints/432",
+                            body.toString(),
+                            apiKey.trim()
+                    )
+            );
+
+            JSONObject data = root.optJSONObject("data");
+            if (data == null) {
+                return null;
+            }
+
+            JSONArray matches = data.optJSONArray("exactMatches");
+            if (matches == null) {
+                return null;
+            }
+
+            for (int i = 0; i < matches.length(); i++) {
+                JSONObject match = matches.optJSONObject(i);
+                if (match == null) {
+                    continue;
+                }
+
+                JSONObject matchedFile = match.optJSONObject("file");
+                if (matchedFile == null) {
+                    continue;
+                }
+
+                long matchedFingerprint =
+                        matchedFile.optLong("fileFingerprint", 0);
+
+                if (matchedFingerprint != fingerprint) {
+                    continue;
+                }
+
+                long modId =
+                        matchedFile.optLong(
+                                "modId",
+                                match.optLong("id", 0)
+                        );
+
+                if (modId != 0) {
+                    return modId;
+                }
+            }
+
+        } catch (Throwable ignored) {
+        }
+
+        return null;
+    }
 }
