@@ -1,6 +1,8 @@
 package com.movtery.zalithlauncher.ui.subassembly.filelist;
 
 import android.annotation.SuppressLint;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Color;
 import android.os.Handler;
@@ -24,13 +26,19 @@ import com.movtery.zalithlauncher.utils.file.FileTools;
 import com.movtery.zalithlauncher.utils.image.ImageUtils;
 import com.movtery.zalithlauncher.utils.stringutils.StringUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.zip.GZIPInputStream;
 
 public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapter.InnerHolder> {
     private final List<FileItemBean> mData = new ArrayList<>();
@@ -44,6 +52,11 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
     private static final ExecutorService ICON_EXECUTOR = Executors.newFixedThreadPool(2);
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final byte[] NO_ICON = new byte[0];
+
+    // ===== Copy file content support =====
+    private static final ExecutorService COPY_EXECUTOR = Executors.newSingleThreadExecutor();
+    // the maximum amount of text that gets copied (the END of the file is kept, because errors are usually at the end)
+    private static final int MAX_COPY_BYTES = 500 * 1024;
 
     // Size of the mod icon in dp. Change this number to make the icons bigger or smaller
     // (36 = smaller, 44 = default, 52 = bigger, 60 = very big).
@@ -101,6 +114,70 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         if (!started && force) {
             Toast.makeText(context, "الفحص شغال حالياً، انتظر شوي", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    // ===== Copy file content =====
+
+    /** log / text files that get a copy button (.txt, .log, .log.gz) */
+    private static boolean isCopyableTextFile(File file) {
+        if (file == null || !file.isFile()) return false;
+        String name = file.getName().toLowerCase(Locale.ROOT);
+        return name.endsWith(".txt") || name.endsWith(".log") || name.endsWith(".log.gz");
+    }
+
+    /** reads the file (decompressing .gz) in the background, then copies the text to the clipboard */
+    private static void copyFileContent(Context context, File file) {
+        final Context appCtx = context.getApplicationContext();
+        COPY_EXECUTOR.execute(() -> {
+            String text = null;
+            boolean truncated = false;
+            try (InputStream raw = new FileInputStream(file);
+                 InputStream in = file.getName().toLowerCase(Locale.ROOT).endsWith(".gz")
+                         ? new GZIPInputStream(raw) : raw) {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                    // keep only the end of the file in memory if it is very big
+                    if (out.size() > MAX_COPY_BYTES * 2) {
+                        byte[] all = out.toByteArray();
+                        out.reset();
+                        out.write(all, all.length - MAX_COPY_BYTES, MAX_COPY_BYTES);
+                        truncated = true;
+                    }
+                }
+                byte[] all = out.toByteArray();
+                if (all.length > MAX_COPY_BYTES) {
+                    all = Arrays.copyOfRange(all, all.length - MAX_COPY_BYTES, all.length);
+                    truncated = true;
+                }
+                text = new String(all, StandardCharsets.UTF_8);
+            } catch (Throwable ignored) {
+            }
+
+            final String result = text;
+            final boolean cut = truncated;
+            MAIN_HANDLER.post(() -> {
+                if (result == null) {
+                    Toast.makeText(appCtx, "فشل نسخ الملف", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (result.isEmpty()) {
+                    Toast.makeText(appCtx, "الملف فارغ", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                try {
+                    ClipboardManager clipboard = (ClipboardManager) appCtx.getSystemService(Context.CLIPBOARD_SERVICE);
+                    clipboard.setPrimaryClip(ClipData.newPlainText("log", result));
+                    Toast.makeText(appCtx,
+                            cut ? "تم نسخ آخر 500 كيلوبايت فقط (الملف كبير)" : "تم نسخ محتوى الملف",
+                            Toast.LENGTH_SHORT).show();
+                } catch (Throwable t) {
+                    Toast.makeText(appCtx, "فشل نسخ الملف", Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
     }
 
     @NonNull
@@ -230,6 +307,11 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                     toggleSelection(mFileItemBean, binding.check);
                 }
             });
+            binding.copyButton.setOnClickListener(v -> {
+                if (mFileItemBean != null && mFileItemBean.file != null) {
+                    copyFileContent(context, mFileItemBean.file);
+                }
+            });
             if (mOnItemClickListener != null) {
                 itemView.setOnClickListener(v -> {
                     if (isMultiSelectMode) {
@@ -257,6 +339,9 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             File file = fileItemBean.file;
 
             binding.name.setText(fileItemBean.name);
+
+            // copy button: only for log / text files
+            binding.copyButton.setVisibility(isCopyableTextFile(file) ? View.VISIBLE : View.GONE);
 
             int infoLayoutVisible = View.GONE;
             if (fileItemBean.date != null) {
