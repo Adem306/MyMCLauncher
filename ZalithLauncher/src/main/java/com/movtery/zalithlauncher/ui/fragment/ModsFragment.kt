@@ -127,7 +127,7 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                 setShowFiles(true)
                 setShowFolders(false)
 
-                setOnModPageClickListener(
+                adapter.setOnModPageClickListener(
                     object :
                         FileRecyclerAdapter.OnModPageClickListener {
 
