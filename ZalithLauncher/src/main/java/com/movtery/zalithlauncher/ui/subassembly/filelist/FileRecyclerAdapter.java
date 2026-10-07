@@ -476,6 +476,8 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             binding.copyButton.setVisibility(copyVisibility);
             binding.copyErrorsButton.setVisibility(copyVisibility);
 
+            updateModStatus(file);
+
             int infoLayoutVisible = View.GONE;
             if (fileItemBean.date != null) {
                 String date = StringUtils.formatDate(fileItemBean.date, Locale.getDefault(), TimeZone.getDefault());
@@ -522,6 +524,23 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                 Glide.with(context).clear(binding.image);
                 binding.image.setImageDrawable(fileItemBean.image);
             }
+        }
+
+        /** small mark next to the name of a mod: white/black check = enabled (.jar), red cross = disabled (.jar.disabled) */
+        private void updateModStatus(File file) {
+            binding.modStatus.setVisibility(View.GONE);
+            if (file == null || !file.isFile()) return;
+
+            String name = file.getName().toLowerCase(Locale.ROOT);
+            boolean disabled = name.endsWith(".jar.disabled");
+            boolean enabled = name.endsWith(".jar") && ModIconStore.isModJar(file);
+            if (!enabled && !disabled) return;
+
+            binding.modStatus.setImageResource(enabled ? R.drawable.ic_mod_enabled : R.drawable.ic_mod_disabled);
+            binding.modStatus.setColorFilter(enabled
+                    ? context.getResources().getColor(R.color.black_or_white, context.getTheme())
+                    : Color.rgb(255, 82, 82));
+            binding.modStatus.setVisibility(View.VISIBLE);
         }
 
         private void restoreImageStyle() {
