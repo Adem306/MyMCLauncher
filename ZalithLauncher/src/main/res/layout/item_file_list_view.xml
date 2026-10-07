@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.movtery.zalithlauncher.ui.layout.AnimConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.movtery.zalithlauncher.ui.layout.AnimConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -26,34 +27,18 @@
         android:layout_marginHorizontal="@dimen/_8sdp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="@+id/image"
-        app:layout_constraintEnd_toStartOf="@+id/copy_errors_button"
+        app:layout_constraintEnd_toStartOf="@+id/actions_barrier"
         app:layout_constraintStart_toEndOf="@+id/image"
         app:layout_constraintTop_toTopOf="@+id/image">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <ImageView
-                android:id="@+id/mod_status"
-                android:layout_width="@dimen/_12sdp"
-                android:layout_height="@dimen/_12sdp"
-                android:layout_marginEnd="@dimen/_4sdp"
-                android:scaleType="centerInside"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/name"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:singleLine="true"
-                android:text="File Name"
-                android:textSize="@dimen/_11sdp" />
-
-        </LinearLayout>
+            android:ellipsize="middle"
+            android:maxLines="1"
+            android:textSize="@dimen/_11ssp"
+            tools:text="example-mod.jar" />
 
         <LinearLayout
             android:id="@+id/info_layout"
@@ -66,65 +51,140 @@
                 android:id="@+id/time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:singleLine="true"
-                android:text="Time"
-                android:textSize="@dimen/_8sdp" />
+                android:layout_marginEnd="@dimen/_6sdp"
+                android:maxLines="1"
+                android:textSize="@dimen/_8ssp"
+                tools:text="2026/10/07" />
 
             <TextView
                 android:id="@+id/size"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/_8sdp"
-                android:singleLine="true"
-                android:text="Size"
-                android:textSize="@dimen/_8sdp" />
+                android:maxLines="1"
+                android:textSize="@dimen/_8ssp"
+                tools:text="2.5 MB" />
 
         </LinearLayout>
 
     </LinearLayout>
 
     <ImageView
+        android:id="@+id/mod_status"
+        android:layout_width="@dimen/_18sdp"
+        android:layout_height="@dimen/_18sdp"
+        android:layout_marginEnd="@dimen/_4sdp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/actions_barrier"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ImageView
         android:id="@+id/copy_errors_button"
         android:layout_width="@dimen/_28sdp"
         android:layout_height="@dimen/_28sdp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="@dimen/_6sdp"
-        android:scaleType="centerInside"
-        android:src="@drawable/ic_copy_errors"
+        android:layout_marginEnd="@dimen/_2sdp"
+        android:contentDescription="Copy errors"
+        android:src="@drawable/ic_copy"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/copy_button"
-        app:layout_constraintTop_toTopOf="parent"
-        app:tint="#FF5252" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <ImageView
         android:id="@+id/copy_button"
         android:layout_width="@dimen/_28sdp"
         android:layout_height="@dimen/_28sdp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="@dimen/_6sdp"
-        android:scaleType="centerInside"
-        android:src="@drawable/ic_copy_log_text"
+        android:layout_marginEnd="@dimen/_2sdp"
+        android:contentDescription="Copy file"
+        android:src="@drawable/ic_copy"
         android:visibility="gone"
-        app:layout_goneMarginEnd="@dimen/_8sdp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/platform_buttons"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/platform_buttons"
+        android:layout_width="@dimen/_88sdp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="@dimen/_2sdp"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingVertical="1dp"
+        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/copy_mod_name_button"
-        app:layout_constraintTop_toTopOf="parent"
-        app:tint="@color/black_or_white" />
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:id="@+id/curseforge_button"
+            android:layout_width="match_parent"
+            android:layout_height="18dp"
+            android:background="@drawable/bg_curseforge_mod_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_curseforge"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="CurseForge"
+                android:textColor="#FFFFFF"
+                android:textSize="7sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/modrinth_button"
+            android:layout_width="match_parent"
+            android:layout_height="18dp"
+            android:layout_marginTop="1dp"
+            android:background="@drawable/bg_modrinth_mod_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_modrinth"
+                android:tint="#FFFFFF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="Modrinth"
+                android:textColor="#FFFFFF"
+                android:textSize="7sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
 
     <ImageView
         android:id="@+id/copy_mod_name_button"
         android:layout_width="@dimen/_28sdp"
         android:layout_height="@dimen/_28sdp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="@dimen/_6sdp"
-        android:scaleType="centerInside"
+        android:layout_marginEnd="@dimen/_2sdp"
+        android:contentDescription="Copy mod name"
         android:src="@drawable/ic_copy"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/check"
-        app:layout_constraintTop_toTopOf="parent"
-        app:tint="@color/black_or_white" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <CheckBox
         android:id="@+id/check"
@@ -134,5 +194,12 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/actions_barrier"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="start"
+        app:constraint_referenced_ids="copy_errors_button,copy_button,platform_buttons,copy_mod_name_button,check" />
 
 </com.movtery.zalithlauncher.ui.layout.AnimConstraintLayout>
