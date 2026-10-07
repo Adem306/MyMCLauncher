@@ -9,11 +9,15 @@ import android.widget.CompoundButton
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
 import com.getkeepsafe.taptargetview.TapTargetSequence
 import com.movtery.anim.AnimPlayer
 import com.movtery.anim.animations.Animations
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.databinding.FragmentModsBinding
+import com.movtery.zalithlauncher.feature.download.InfoViewModel
+import com.movtery.zalithlauncher.feature.download.enums.Platform
+import com.movtery.zalithlauncher.feature.download.platform.ModPageResolver
 import com.movtery.zalithlauncher.feature.mod.ModToggleHandler
 import com.movtery.zalithlauncher.feature.mod.ModUtils
 import com.movtery.zalithlauncher.task.Task
@@ -22,6 +26,7 @@ import com.movtery.zalithlauncher.ui.dialog.FilesDialog
 import com.movtery.zalithlauncher.ui.dialog.FilesDialog.FilesButton
 import com.movtery.zalithlauncher.ui.subassembly.filelist.FileIcon
 import com.movtery.zalithlauncher.ui.subassembly.filelist.FileItemBean
+import com.movtery.zalithlauncher.ui.subassembly.filelist.FileRecyclerAdapter
 import com.movtery.zalithlauncher.ui.subassembly.filelist.FileSelectedListener
 import com.movtery.zalithlauncher.ui.subassembly.view.SearchViewWrapper
 import com.movtery.zalithlauncher.utils.NewbieGuideUtils
@@ -36,6 +41,7 @@ import java.io.File
 import java.util.function.Consumer
 
 class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
+
     companion object {
         const val TAG: String = "ModsFragment"
         const val BUNDLE_ROOT_PATH: String = "root_path"
@@ -48,23 +54,47 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        openDocumentLauncher = registerForActivityResult(OpenDocumentWithExtension("jar", true)) { uris: List<Uri>? ->
-            uris?.let { uriList ->
-                val dialog = ZHTools.showTaskRunningDialog(requireContext())
-                Task.runTask {
-                    uriList.forEach { uri ->
-                        FileTools.copyFileInBackground(requireContext(), uri, mRootPath)
-                    }
-                }.ended(TaskExecutors.getAndroidUI()) {
-                    Toast.makeText(requireContext(), getString(R.string.profile_mods_added_mod), Toast.LENGTH_SHORT).show()
-                    binding.fileRecyclerView.refreshPath()
-                }.onThrowable { e ->
-                    Tools.showErrorRemote(e)
-                }.finallyTask(TaskExecutors.getAndroidUI()) {
-                    dialog.dismiss()
-                }.execute()
+
+        openDocumentLauncher =
+            registerForActivityResult(
+                OpenDocumentWithExtension("jar", true)
+            ) { uris: List<Uri>? ->
+
+                uris?.let { uriList ->
+
+                    val dialog =
+                        ZHTools.showTaskRunningDialog(
+                            requireContext()
+                        )
+
+                    Task.runTask {
+                        uriList.forEach { uri ->
+                            FileTools.copyFileInBackground(
+                                requireContext(),
+                                uri,
+                                mRootPath
+                            )
+                        }
+                    }.ended(TaskExecutors.getAndroidUI()) {
+
+                        Toast.makeText(
+                            requireContext(),
+                            getString(
+                                R.string.profile_mods_added_mod
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        binding.fileRecyclerView.refreshPath()
+
+                    }.onThrowable { e ->
+                        Tools.showErrorRemote(e)
+
+                    }.finallyTask(TaskExecutors.getAndroidUI()) {
+                        dialog.dismiss()
+                    }.execute()
+                }
             }
-        }
     }
 
     override fun onCreateView(
@@ -72,147 +102,364 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        binding = FragmentModsBinding.inflate(layoutInflater)
-        mSearchViewWrapper = SearchViewWrapper(this)
+        binding =
+            FragmentModsBinding.inflate(
+                layoutInflater
+            )
+
+        mSearchViewWrapper =
+            SearchViewWrapper(this)
+
         return binding.root
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(
+        view: View,
+        savedInstanceState: Bundle?
+    ) {
         initViews()
         parseBundle()
 
         binding.apply {
+
             fileRecyclerView.apply {
+
                 setShowFiles(true)
                 setShowFolders(false)
 
-                setFileSelectedListener(object : FileSelectedListener() {
-                    override fun onFileSelected(file: File?, path: String?) {
-                        file?.let {
-                            if (it.isFile) {
-                                val fileName = it.name
+                setOnModPageClickListener(
+                    object :
+                        FileRecyclerAdapter.OnModPageClickListener {
 
-                                val filesButton = FilesButton()
-                                filesButton.setButtonVisibility(true, true, true, true, true,
-                                    (fileName.endsWith(ModUtils.JAR_FILE_SUFFIX) || fileName.endsWith(ModUtils.DISABLE_JAR_FILE_SUFFIX)))
-                                filesButton.setMessageText(if (it.isDirectory) getString(R.string.file_folder_message) else getString(R.string.file_message))
+                        override fun onCurseForgeClick(
+                            file: File
+                        ) {
+                            openModPage(
+                                file,
+                                Platform.CURSEFORGE
+                            )
+                        }
 
-                                if (fileName.endsWith(ModUtils.JAR_FILE_SUFFIX)) filesButton.setMoreButtonText(getString(R.string.profile_mods_disable))
-                                else if (fileName.endsWith(ModUtils.DISABLE_JAR_FILE_SUFFIX)) filesButton.setMoreButtonText(getString(R.string.profile_mods_enable))
-
-                                val filesDialog = FilesDialog(requireContext(), filesButton,
-                                    Task.runTask(TaskExecutors.getAndroidUI()) { refreshPath() },
-                                    fullPath, it
-                                )
-
-                                filesDialog.setCopyButtonClick { visibility = View.VISIBLE }
-
-                                if (fileName.endsWith(ModUtils.JAR_FILE_SUFFIX)) {
-                                    filesDialog.setFileSuffix(ModUtils.JAR_FILE_SUFFIX)
-                                    filesDialog.setMoreButtonClick {
-                                        ModUtils.disableMod(it)
-                                        refreshPath()
-                                        filesDialog.dismiss()
-                                    }
-                                } else if (fileName.endsWith(ModUtils.DISABLE_JAR_FILE_SUFFIX)) {
-                                    filesDialog.setFileSuffix(ModUtils.DISABLE_JAR_FILE_SUFFIX)
-                                    filesDialog.setMoreButtonClick {
-                                        ModUtils.enableMod(it)
-                                        refreshPath()
-                                        filesDialog.dismiss()
-                                    }
-                                }
-
-                                filesDialog.show()
-                            }
+                        override fun onModrinthClick(
+                            file: File
+                        ) {
+                            openModPage(
+                                file,
+                                Platform.MODRINTH
+                            )
                         }
                     }
+                )
 
-                    override fun onItemLongClick(file: File?, path: String?) {
+                setFileSelectedListener(
+                    object : FileSelectedListener() {
+
+                        override fun onFileSelected(
+                            file: File?,
+                            path: String?
+                        ) {
+                            file?.let {
+
+                                if (it.isFile) {
+
+                                    val fileName = it.name
+
+                                    val filesButton =
+                                        FilesButton()
+
+                                    filesButton.setButtonVisibility(
+                                        true,
+                                        true,
+                                        true,
+                                        true,
+                                        true,
+                                        (
+                                                fileName.endsWith(
+                                                    ModUtils.JAR_FILE_SUFFIX
+                                                )
+                                                        || fileName.endsWith(
+                                                    ModUtils.DISABLE_JAR_FILE_SUFFIX
+                                                )
+                                                )
+                                    )
+
+                                    filesButton.setMessageText(
+                                        if (it.isDirectory)
+                                            getString(
+                                                R.string.file_folder_message
+                                            )
+                                        else
+                                            getString(
+                                                R.string.file_message
+                                            )
+                                    )
+
+                                    if (
+                                        fileName.endsWith(
+                                            ModUtils.JAR_FILE_SUFFIX
+                                        )
+                                    ) {
+                                        filesButton.setMoreButtonText(
+                                            getString(
+                                                R.string.profile_mods_disable
+                                            )
+                                        )
+                                    } else if (
+                                        fileName.endsWith(
+                                            ModUtils.DISABLE_JAR_FILE_SUFFIX
+                                        )
+                                    ) {
+                                        filesButton.setMoreButtonText(
+                                            getString(
+                                                R.string.profile_mods_enable
+                                            )
+                                        )
+                                    }
+
+                                    val filesDialog =
+                                        FilesDialog(
+                                            requireContext(),
+                                            filesButton,
+                                            Task.runTask(
+                                                TaskExecutors.getAndroidUI()
+                                            ) {
+                                                refreshPath()
+                                            },
+                                            fullPath,
+                                            it
+                                        )
+
+                                    filesDialog.setCopyButtonClick {
+                                        visibility =
+                                            View.VISIBLE
+                                    }
+
+                                    if (
+                                        fileName.endsWith(
+                                            ModUtils.JAR_FILE_SUFFIX
+                                        )
+                                    ) {
+
+                                        filesDialog.setFileSuffix(
+                                            ModUtils.JAR_FILE_SUFFIX
+                                        )
+
+                                        filesDialog.setMoreButtonClick {
+                                            ModUtils.disableMod(it)
+                                            refreshPath()
+                                            filesDialog.dismiss()
+                                        }
+
+                                    } else if (
+                                        fileName.endsWith(
+                                            ModUtils.DISABLE_JAR_FILE_SUFFIX
+                                        )
+                                    ) {
+
+                                        filesDialog.setFileSuffix(
+                                            ModUtils.DISABLE_JAR_FILE_SUFFIX
+                                        )
+
+                                        filesDialog.setMoreButtonClick {
+                                            ModUtils.enableMod(it)
+                                            refreshPath()
+                                            filesDialog.dismiss()
+                                        }
+                                    }
+
+                                    filesDialog.show()
+                                }
+                            }
+                        }
+
+                        override fun onItemLongClick(
+                            file: File?,
+                            path: String?
+                        ) {
+                        }
                     }
-                })
+                )
 
-                setOnMultiSelectListener { itemBeans: List<FileItemBean> ->
+                setOnMultiSelectListener {
+                    itemBeans: List<FileItemBean> ->
+
                     if (itemBeans.isNotEmpty()) {
+
                         Task.runTask {
-                            val selectedFiles: MutableList<File> = ArrayList()
-                            itemBeans.forEach(Consumer { value: FileItemBean ->
-                                val file = value.file
-                                file?.apply { selectedFiles.add(this) }
-                            })
-                            selectedFiles
-                        }.ended(TaskExecutors.getAndroidUI()) { selectedFiles ->
-                            val filesButton = FilesButton()
-                            filesButton.setButtonVisibility(true, true, false, false, true, true)
-                            filesButton.setDialogText(
-                                getString(R.string.file_multi_select_mode_title),
-                                getString(R.string.file_multi_select_mode_message, itemBeans.size),
-                                getString(R.string.profile_mods_disable_or_enable)
+
+                            val selectedFiles:
+                                    MutableList<File> =
+                                ArrayList()
+
+                            itemBeans.forEach(
+                                Consumer { value: FileItemBean ->
+
+                                    val file = value.file
+
+                                    file?.apply {
+                                        selectedFiles.add(this)
+                                    }
+                                }
                             )
 
-                            val filesDialog = FilesDialog(requireContext(), filesButton,
-                                Task.runTask(TaskExecutors.getAndroidUI()) {
-                                    closeMultiSelect()
-                                    refreshPath()
-                                }, fullPath, selectedFiles!!)
-                            filesDialog.setCopyButtonClick { operateView.pasteButton.visibility = View.VISIBLE }
-                            filesDialog.setMoreButtonClick {
-                                ModToggleHandler(requireContext(), selectedFiles,
-                                    Task.runTask(TaskExecutors.getAndroidUI()) {
+                            selectedFiles
+
+                        }.ended(
+                            TaskExecutors.getAndroidUI()
+                        ) { selectedFiles ->
+
+                            val filesButton =
+                                FilesButton()
+
+                            filesButton.setButtonVisibility(
+                                true,
+                                true,
+                                false,
+                                false,
+                                true,
+                                true
+                            )
+
+                            filesButton.setDialogText(
+                                getString(
+                                    R.string.file_multi_select_mode_title
+                                ),
+                                getString(
+                                    R.string.file_multi_select_mode_message,
+                                    itemBeans.size
+                                ),
+                                getString(
+                                    R.string.profile_mods_disable_or_enable
+                                )
+                            )
+
+                            val filesDialog =
+                                FilesDialog(
+                                    requireContext(),
+                                    filesButton,
+                                    Task.runTask(
+                                        TaskExecutors.getAndroidUI()
+                                    ) {
                                         closeMultiSelect()
                                         refreshPath()
-                                    }).start()
+                                    },
+                                    fullPath,
+                                    selectedFiles!!
+                                )
+
+                            filesDialog.setCopyButtonClick {
+                                operateView
+                                    .pasteButton
+                                    .visibility =
+                                    View.VISIBLE
                             }
+
+                            filesDialog.setMoreButtonClick {
+
+                                ModToggleHandler(
+                                    requireContext(),
+                                    selectedFiles,
+                                    Task.runTask(
+                                        TaskExecutors.getAndroidUI()
+                                    ) {
+                                        closeMultiSelect()
+                                        refreshPath()
+                                    }
+                                ).start()
+                            }
+
                             filesDialog.show()
                         }.execute()
                     }
                 }
 
                 setRefreshListener {
-                    setVisibilityAnim(nothingLayout, isNoFile)
+                    setVisibilityAnim(
+                        nothingLayout,
+                        isNoFile
+                    )
                 }
             }
 
-            multiSelectFiles.setOnCheckedChangeListener { _: CompoundButton?, isChecked: Boolean ->
+            multiSelectFiles.setOnCheckedChangeListener {
+                    _: CompoundButton?,
+                    isChecked: Boolean ->
+
                 selectAll.apply {
                     this.isChecked = false
-                    visibility = if (isChecked) View.VISIBLE else View.GONE
+                    visibility =
+                        if (isChecked)
+                            View.VISIBLE
+                        else
+                            View.GONE
                 }
 
-                operateView.copySelectedButton.visibility =
-                    if (isChecked) View.VISIBLE else View.GONE
+                operateView
+                    .copySelectedButton
+                    .visibility =
+                    if (isChecked)
+                        View.VISIBLE
+                    else
+                        View.GONE
 
-                fileRecyclerView.adapter.setMultiSelectMode(isChecked)
+                fileRecyclerView
+                    .adapter
+                    .setMultiSelectMode(
+                        isChecked
+                    )
+
                 mSearchViewWrapper.let {
                     if (mSearchViewWrapper.isVisible()) {
-                        mSearchViewWrapper.setVisibility(!isChecked)
+                        mSearchViewWrapper.setVisibility(
+                            !isChecked
+                        )
                     }
                 }
             }
 
             operateView.apply {
-                selectAll.setOnCheckedChangeListener { _: CompoundButton?, isChecked: Boolean ->
-                    fileRecyclerView.adapter.selectAllFiles(isChecked)
+
+                selectAll.setOnCheckedChangeListener {
+                        _: CompoundButton?,
+                        isChecked: Boolean ->
+
+                    fileRecyclerView
+                        .adapter
+                        .selectAllFiles(
+                            isChecked
+                        )
                 }
 
                 copySelectedButton.setOnClickListener {
-                    val selectedFiles = fileRecyclerView.adapter.getSelectedFiles()
+
+                    val selectedFiles =
+                        fileRecyclerView
+                            .adapter
+                            .getSelectedFiles()
 
                     if (selectedFiles.isEmpty()) {
+
                         Toast.makeText(
                             requireContext(),
                             "لم يتم تحديد أي مود",
                             Toast.LENGTH_SHORT
                         ).show()
+
                         return@setOnClickListener
                     }
 
-                    val names = selectedFiles.joinToString("\n") { it.name }
+                    val names =
+                        selectedFiles.joinToString(
+                            "\n"
+                        ) {
+                            it.name
+                        }
 
                     val clipboard =
-                        requireContext().getSystemService(
-                            android.content.ClipboardManager::class.java
-                        )
+                        requireContext()
+                            .getSystemService(
+                                android.content.ClipboardManager::class.java
+                            )
 
                     clipboard.setPrimaryClip(
                         android.content.ClipData.newPlainText(
@@ -230,101 +477,295 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
 
                 returnButton.setOnClickListener {
                     closeMultiSelect()
-                    ZHTools.onBackPressed(requireActivity())
+                    ZHTools.onBackPressed(
+                        requireActivity()
+                    )
                 }
 
                 addFileButton.setOnClickListener {
+
                     closeMultiSelect()
+
                     val suffix = ".jar"
+
                     Toast.makeText(
                         requireActivity(),
-                        String.format(getString(R.string.file_add_file_tip), suffix),
+                        String.format(
+                            getString(
+                                R.string.file_add_file_tip
+                            ),
+                            suffix
+                        ),
                         Toast.LENGTH_SHORT
                     ).show()
-                    openDocumentLauncher.launch(suffix)
+
+                    openDocumentLauncher.launch(
+                        suffix
+                    )
                 }
 
                 pasteButton.setOnClickListener {
+
                     PasteFile.getInstance().pasteFiles(
                         requireActivity(),
                         fileRecyclerView.fullPath,
-                        object : FileCopyHandler.FileExtensionGetter {
-                            override fun onGet(file: File?): String? {
-                                return file?.let { it1 -> getFileSuffix(it1) }
+                        object :
+                            FileCopyHandler.FileExtensionGetter {
+
+                            override fun onGet(
+                                file: File?
+                            ): String? {
+                                return file?.let {
+                                    getFileSuffix(it)
+                                }
                             }
                         },
-                        Task.runTask(TaskExecutors.getAndroidUI()) {
+                        Task.runTask(
+                            TaskExecutors.getAndroidUI()
+                        ) {
                             closeMultiSelect()
-                            pasteButton.visibility = View.GONE
-                            fileRecyclerView.refreshPath()
+                            pasteButton.visibility =
+                                View.GONE
+                            fileRecyclerView
+                                .refreshPath()
                         }
                     )
                 }
 
-                createFolderButton.setOnClickListener { goDownloadMod() }
+                createFolderButton.setOnClickListener {
+                    goDownloadMod()
+                }
 
                 searchButton.setOnClickListener {
                     closeMultiSelect()
-                    mSearchViewWrapper.setVisibility()
+                    mSearchViewWrapper
+                        .setVisibility()
                 }
 
                 refreshButton.setOnClickListener {
                     closeMultiSelect()
-                    fileRecyclerView.refreshPath()
+                    fileRecyclerView
+                        .refreshPath()
                 }
 
                 refreshButton.setOnLongClickListener {
+
                     closeMultiSelect()
-                    fileRecyclerView.adapter.refreshModIcons(requireContext(), true)
+
+                    fileRecyclerView
+                        .adapter
+                        .refreshModIcons(
+                            requireContext(),
+                            true
+                        )
+
                     true
                 }
             }
 
-            goDownloadText.setOnClickListener { goDownloadMod() }
+            goDownloadText.setOnClickListener {
+                goDownloadMod()
+            }
 
-            fileRecyclerView.lockAndListAt(File(mRootPath), File(mRootPath))
+            fileRecyclerView.lockAndListAt(
+                File(mRootPath),
+                File(mRootPath)
+            )
         }
 
         startNewbieGuide()
     }
 
+    /**
+     * Finds the mod on the selected platform and opens
+     * its normal in-app download page.
+     */
+    private fun openModPage(
+        file: File,
+        platform: Platform
+    ) {
+        val platformName =
+            if (platform == Platform.CURSEFORGE)
+                "CurseForge"
+            else
+                "Modrinth"
+
+        Toast.makeText(
+            requireContext(),
+            "جاري البحث عن المود على $platformName...",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        Task.runTask {
+            ModPageResolver.resolve(
+                file,
+                platform
+            )
+        }.ended(
+            TaskExecutors.getAndroidUI()
+        ) { infoItem ->
+
+            if (infoItem == null) {
+
+                Toast.makeText(
+                    requireContext(),
+                    "المود غير موجود على $platformName",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                return@ended
+            }
+
+            val infoViewModel =
+                ViewModelProvider(
+                    requireActivity()
+                )[InfoViewModel::class.java]
+
+            infoViewModel.infoItem =
+                infoItem.copy()
+
+            infoViewModel.platformHelper =
+                platform.helper.copy()
+
+            ZHTools.swapFragmentWithAnim(
+                this,
+                DownloadModFragment::class.java,
+                DownloadModFragment.TAG,
+                null
+            )
+        }.onThrowable { error ->
+
+            Toast.makeText(
+                requireContext(),
+                "فشل البحث عن المود على $platformName",
+                Toast.LENGTH_LONG
+            ).show()
+
+            Tools.showErrorRemote(error)
+        }.execute()
+    }
+
     private fun startNewbieGuide() {
-        if (NewbieGuideUtils.showOnlyOne(TAG)) return
+        if (NewbieGuideUtils.showOnlyOne(TAG)) {
+            return
+        }
+
         binding.operateView.apply {
-            val fragmentActivity = requireActivity()
+
+            val fragmentActivity =
+                requireActivity()
+
             TapTargetSequence(fragmentActivity)
                 .targets(
-                    NewbieGuideUtils.getSimpleTarget(fragmentActivity, refreshButton, getString(R.string.generic_refresh), getString(R.string.newbie_guide_general_refresh)),
-                    NewbieGuideUtils.getSimpleTarget(fragmentActivity, searchButton, getString(R.string.generic_search), getString(R.string.newbie_guide_mod_search)),
-                    NewbieGuideUtils.getSimpleTarget(fragmentActivity, addFileButton, getString(R.string.profile_mods_add_mod), getString(R.string.newbie_guide_mod_import)),
-                    NewbieGuideUtils.getSimpleTarget(fragmentActivity, createFolderButton, getString(R.string.profile_mods_download_mod), getString(R.string.newbie_guide_mod_download)),
-                    NewbieGuideUtils.getSimpleTarget(fragmentActivity, returnButton, getString(R.string.generic_close), getString(R.string.newbie_guide_general_close)))
+                    NewbieGuideUtils.getSimpleTarget(
+                        fragmentActivity,
+                        refreshButton,
+                        getString(
+                            R.string.generic_refresh
+                        ),
+                        getString(
+                            R.string.newbie_guide_general_refresh
+                        )
+                    ),
+
+                    NewbieGuideUtils.getSimpleTarget(
+                        fragmentActivity,
+                        searchButton,
+                        getString(
+                            R.string.generic_search
+                        ),
+                        getString(
+                            R.string.newbie_guide_mod_search
+                        )
+                    ),
+
+                    NewbieGuideUtils.getSimpleTarget(
+                        fragmentActivity,
+                        addFileButton,
+                        getString(
+                            R.string.profile_mods_add_mod
+                        ),
+                        getString(
+                            R.string.newbie_guide_mod_import
+                        )
+                    ),
+
+                    NewbieGuideUtils.getSimpleTarget(
+                        fragmentActivity,
+                        createFolderButton,
+                        getString(
+                            R.string.profile_mods_download_mod
+                        ),
+                        getString(
+                            R.string.newbie_guide_mod_download
+                        )
+                    ),
+
+                    NewbieGuideUtils.getSimpleTarget(
+                        fragmentActivity,
+                        returnButton,
+                        getString(
+                            R.string.generic_close
+                        ),
+                        getString(
+                            R.string.newbie_guide_general_close
+                        )
+                    )
+                )
                 .start()
         }
     }
 
     private fun closeMultiSelect() {
         binding.apply {
-            multiSelectFiles.isChecked = false
-            selectAll.visibility = View.GONE
-            operateView.copySelectedButton.visibility = View.GONE
+
+            multiSelectFiles.isChecked =
+                false
+
+            selectAll.visibility =
+                View.GONE
+
+            operateView
+                .copySelectedButton
+                .visibility =
+                View.GONE
         }
     }
 
-    private fun getFileSuffix(file: File): String {
+    private fun getFileSuffix(
+        file: File
+    ): String {
         val name = file.name
-        if (name.endsWith(ModUtils.DISABLE_JAR_FILE_SUFFIX)) {
+
+        if (name.endsWith(
+                ModUtils.DISABLE_JAR_FILE_SUFFIX
+            )
+        ) {
             return ModUtils.DISABLE_JAR_FILE_SUFFIX
-        } else if (name.endsWith(ModUtils.JAR_FILE_SUFFIX)) {
+
+        } else if (name.endsWith(
+                ModUtils.JAR_FILE_SUFFIX
+            )
+        ) {
             return ModUtils.JAR_FILE_SUFFIX
+
         } else {
-            val dotIndex = file.name.lastIndexOf('.')
-            return if (dotIndex == -1) "" else file.name.substring(dotIndex)
+
+            val dotIndex =
+                file.name.lastIndexOf('.')
+
+            return if (dotIndex == -1)
+                ""
+            else
+                file.name.substring(
+                    dotIndex
+                )
         }
     }
 
     private fun goDownloadMod() {
         closeMultiSelect()
+
         ZHTools.swapFragmentWithAnim(
             this,
             DownloadFragment::class.java,
@@ -334,38 +775,92 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
     }
 
     private fun parseBundle() {
-        val bundle = arguments ?: throw NullPointerException("The argument is null!")
-        mRootPath = bundle.getString(BUNDLE_ROOT_PATH) ?: throw IllegalStateException("root path is not set！")
+        val bundle =
+            arguments
+                ?: throw NullPointerException(
+                    "The argument is null!"
+                )
+
+        mRootPath =
+            bundle.getString(
+                BUNDLE_ROOT_PATH
+            )
+                ?: throw IllegalStateException(
+                    "root path is not set！"
+                )
     }
 
     private fun initViews() {
         binding.apply {
+
             mSearchViewWrapper.apply {
-                setSearchListener(object : SearchViewWrapper.SearchListener {
-                    override fun onSearch(string: String?, caseSensitive: Boolean): Int {
-                        return fileRecyclerView.searchFiles(string, caseSensitive)
+
+                setSearchListener(
+                    object :
+                        SearchViewWrapper.SearchListener {
+
+                        override fun onSearch(
+                            string: String?,
+                            caseSensitive: Boolean
+                        ): Int {
+
+                            return fileRecyclerView.searchFiles(
+                                string,
+                                caseSensitive
+                            )
+                        }
                     }
-                })
-                setShowSearchResultsListener(object : SearchViewWrapper.ShowSearchResultsListener {
-                    override fun onSearch(show: Boolean) {
-                        fileRecyclerView.setShowSearchResultsOnly(show)
+                )
+
+                setShowSearchResultsListener(
+                    object :
+                        SearchViewWrapper.ShowSearchResultsListener {
+
+                        override fun onSearch(
+                            show: Boolean
+                        ) {
+                            fileRecyclerView
+                                .setShowSearchResultsOnly(
+                                    show
+                                )
+                        }
                     }
-                })
+                )
             }
 
-            fileRecyclerView.setFileIcon(FileIcon.MOD)
+            fileRecyclerView.setFileIcon(
+                FileIcon.MOD
+            )
 
             operateView.apply {
-                addFileButton.setContentDescription(getString(R.string.profile_mods_add_mod))
-                createFolderButton.setContentDescription(getString(R.string.profile_mods_download_mod))
+
+                addFileButton.setContentDescription(
+                    getString(
+                        R.string.profile_mods_add_mod
+                    )
+                )
+
+                createFolderButton.setContentDescription(
+                    getString(
+                        R.string.profile_mods_download_mod
+                    )
+                )
+
                 createFolderButton.setImageDrawable(
                     ContextCompat.getDrawable(
                         requireContext(),
                         R.drawable.ic_download
                     )
                 )
+
                 pasteButton.setVisibility(
-                    if (PasteFile.getInstance().pasteType != null) View.VISIBLE else View.GONE
+                    if (
+                        PasteFile.getInstance()
+                            .pasteType != null
+                    )
+                        View.VISIBLE
+                    else
+                        View.GONE
                 )
 
                 ZHTools.setTooltipText(
@@ -380,17 +875,41 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
         }
     }
 
-    override fun slideIn(animPlayer: AnimPlayer) {
+    override fun slideIn(
+        animPlayer: AnimPlayer
+    ) {
         binding.apply {
-            animPlayer.apply(AnimPlayer.Entry(modsLayout, Animations.BounceInDown))
-                .apply(AnimPlayer.Entry(operateLayout, Animations.BounceInLeft))
+
+            animPlayer.apply(
+                AnimPlayer.Entry(
+                    modsLayout,
+                    Animations.BounceInDown
+                )
+            ).apply(
+                AnimPlayer.Entry(
+                    operateLayout,
+                    Animations.BounceInLeft
+                )
+            )
         }
     }
 
-    override fun slideOut(animPlayer: AnimPlayer) {
+    override fun slideOut(
+        animPlayer: AnimPlayer
+    ) {
         binding.apply {
-            animPlayer.apply(AnimPlayer.Entry(modsLayout, Animations.FadeOutUp))
-                .apply(AnimPlayer.Entry(operateLayout, Animations.FadeOutRight))
+
+            animPlayer.apply(
+                AnimPlayer.Entry(
+                    modsLayout,
+                    Animations.FadeOutUp
+                )
+            ).apply(
+                AnimPlayer.Entry(
+                    operateLayout,
+                    Animations.FadeOutRight
+                )
+            )
         }
     }
 }
