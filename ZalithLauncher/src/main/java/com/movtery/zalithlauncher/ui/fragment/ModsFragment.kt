@@ -107,7 +107,6 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
 
                                 filesDialog.setCopyButtonClick { visibility = View.VISIBLE }
 
-                                //检测后缀名，以设置正确的按钮
                                 if (fileName.endsWith(ModUtils.JAR_FILE_SUFFIX)) {
                                     filesDialog.setFileSuffix(ModUtils.JAR_FILE_SUFFIX)
                                     filesDialog.setMoreButtonClick {
@@ -136,7 +135,6 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                 setOnMultiSelectListener { itemBeans: List<FileItemBean> ->
                     if (itemBeans.isNotEmpty()) {
                         Task.runTask {
-                            //取出全部文件
                             val selectedFiles: MutableList<File> = ArrayList()
                             itemBeans.forEach(Consumer { value: FileItemBean ->
                                 val file = value.file
@@ -180,13 +178,54 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                     this.isChecked = false
                     visibility = if (isChecked) View.VISIBLE else View.GONE
                 }
+
+                operateView.copySelectedButton.visibility =
+                    if (isChecked) View.VISIBLE else View.GONE
+
                 fileRecyclerView.adapter.setMultiSelectMode(isChecked)
-                mSearchViewWrapper.let { if (mSearchViewWrapper.isVisible()) mSearchViewWrapper.setVisibility(!isChecked) }
+                mSearchViewWrapper.let {
+                    if (mSearchViewWrapper.isVisible()) {
+                        mSearchViewWrapper.setVisibility(!isChecked)
+                    }
+                }
             }
 
             operateView.apply {
                 selectAll.setOnCheckedChangeListener { _: CompoundButton?, isChecked: Boolean ->
                     fileRecyclerView.adapter.selectAllFiles(isChecked)
+                }
+
+                copySelectedButton.setOnClickListener {
+                    val selectedFiles = fileRecyclerView.adapter.getSelectedFiles()
+
+                    if (selectedFiles.isEmpty()) {
+                        Toast.makeText(
+                            requireContext(),
+                            "لم يتم تحديد أي مود",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        return@setOnClickListener
+                    }
+
+                    val names = selectedFiles.joinToString("\n") { it.name }
+
+                    val clipboard =
+                        requireContext().getSystemService(
+                            android.content.ClipboardManager::class.java
+                        )
+
+                    clipboard.setPrimaryClip(
+                        android.content.ClipData.newPlainText(
+                            "Mod names",
+                            names
+                        )
+                    )
+
+                    Toast.makeText(
+                        requireContext(),
+                        "تم نسخ ${selectedFiles.size} مود",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
 
                 returnButton.setOnClickListener {
@@ -234,7 +273,6 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                     fileRecyclerView.refreshPath()
                 }
 
-                // long press on refresh: re-check every mod that has no icon (inside the jar or online)
                 refreshButton.setOnLongClickListener {
                     closeMultiSelect()
                     fileRecyclerView.adapter.refreshModIcons(requireContext(), true)
@@ -242,7 +280,7 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                 }
             }
 
-            goDownloadText.setOnClickListener{ goDownloadMod() }
+            goDownloadText.setOnClickListener { goDownloadMod() }
 
             fileRecyclerView.lockAndListAt(File(mRootPath), File(mRootPath))
         }
@@ -266,10 +304,10 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
     }
 
     private fun closeMultiSelect() {
-        //点击其它控件时关闭多选模式
         binding.apply {
             multiSelectFiles.isChecked = false
             selectAll.visibility = View.GONE
+            operateView.copySelectedButton.visibility = View.GONE
         }
     }
 
@@ -326,7 +364,9 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                         R.drawable.ic_download
                     )
                 )
-                pasteButton.setVisibility(if (PasteFile.getInstance().pasteType != null) View.VISIBLE else View.GONE)
+                pasteButton.setVisibility(
+                    if (PasteFile.getInstance().pasteType != null) View.VISIBLE else View.GONE
+                )
 
                 ZHTools.setTooltipText(
                     returnButton,
