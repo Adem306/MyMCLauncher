@@ -26,7 +26,7 @@
         android:layout_marginHorizontal="@dimen/_8sdp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="@+id/image"
-        app:layout_constraintEnd_toStartOf="@+id/check"
+        app:layout_constraintEnd_toStartOf="@+id/copy_button"
         app:layout_constraintStart_toEndOf="@+id/image"
         app:layout_constraintTop_toTopOf="@+id/image">
 
@@ -65,6 +65,21 @@
         </LinearLayout>
 
     </LinearLayout>
+
+    <ImageView
+        android:id="@+id/copy_button"
+        android:layout_width="@dimen/_28sdp"
+        android:layout_height="@dimen/_28sdp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="@dimen/_6sdp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_copy_log_text"
+        android:visibility="gone"
+        app:layout_goneMarginEnd="@dimen/_8sdp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/check"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@color/black_or_white" />
 
     <CheckBox
         android:id="@+id/check"
