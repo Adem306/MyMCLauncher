@@ -1,70 +1,58 @@
 package com.movtery.zalithlauncher.ui.subassembly.about;
 
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
+import android.app.Activity;
+import android.graphics.drawable.Drawable;
 
 import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.RecyclerView;
 
-import com.movtery.zalithlauncher.databinding.ItemAboutViewBinding;
-import com.movtery.zalithlauncher.utils.ZHTools;
+public class AboutItemBean {
+    private final Drawable icon;
+    private final String title, desc;
+    private final AboutItemButtonBean buttonBean;
 
-import java.util.List;
-
-public class AboutRecyclerAdapter extends RecyclerView.Adapter<AboutRecyclerAdapter.InnerHolder> {
-    private final List<AboutItemBean> itemBeans;
-
-    public AboutRecyclerAdapter(List<AboutItemBean> data) {
-        this.itemBeans = data;
+    public AboutItemBean(@NonNull Drawable icon, @NonNull String title, @NonNull String desc, AboutItemButtonBean buttonBean) {
+        this.icon = icon;
+        this.title = title;
+        this.desc = desc;
+        this.buttonBean = buttonBean;
     }
 
-    @NonNull
-    @Override
-    public AboutRecyclerAdapter.InnerHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new InnerHolder(ItemAboutViewBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
+    public Drawable getIcon() {
+        return icon;
     }
 
-    @Override
-    public void onBindViewHolder(@NonNull AboutRecyclerAdapter.InnerHolder holder, int position) {
-        holder.setData(this.itemBeans.get(position));
+    public String getTitle() {
+        return title;
     }
 
-    @Override
-    public int getItemCount() {
-        if (this.itemBeans != null) {
-            return this.itemBeans.size();
-        }
-        return 0;
+    public String getDesc() {
+        return desc;
     }
 
-    public static class InnerHolder extends RecyclerView.ViewHolder {
-        private final ItemAboutViewBinding binding;
+    public AboutItemButtonBean getButtonBean() {
+        return buttonBean;
+    }
 
-        public InnerHolder(@NonNull ItemAboutViewBinding binding) {
-            super(binding.getRoot());
-            this.binding = binding;
+    public static class AboutItemButtonBean {
+        private final Activity activity;
+        private final String name, url;
+
+        public AboutItemButtonBean(@NonNull Activity activity, @NonNull String name, @NonNull String url) {
+            this.activity = activity;
+            this.name = name;
+            this.url = url;
         }
 
-        public void setData(AboutItemBean data) {
-            binding.imageView.setImageDrawable(data.getIcon());
-            binding.titleView.setText(data.getTitle());
-            binding.descView.setText(data.getDesc());
+        public Activity getActivity() {
+            return activity;
+        }
 
-            if (data.getButtonBean() != null) {
-                AboutItemBean.AboutItemButtonBean buttonBean = data.getButtonBean();
-                String buttonName = buttonBean.getName();
+        public String getName() {
+            return name;
+        }
 
-                binding.buttonView.setVisibility(View.VISIBLE);
-                binding.buttonView.setText(buttonName);
-
-                binding.buttonView.setOnClickListener(v -> {
-                    String url = buttonBean.getUrl();
-                    ZHTools.openLink(buttonBean.getActivity(), url);
-                });
-            } else {
-                binding.buttonView.setVisibility(View.GONE);
-            }
+        public String getUrl() {
+            return url;
         }
     }
 }
