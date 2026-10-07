@@ -58,6 +58,17 @@
         android:src="@drawable/ic_add" />
 
     <ImageButton
+        android:id="@+id/copy_selected_button"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Copy selected mod names"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_copy"
+        android:visibility="gone" />
+
+    <ImageButton
         android:id="@+id/return_button"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
