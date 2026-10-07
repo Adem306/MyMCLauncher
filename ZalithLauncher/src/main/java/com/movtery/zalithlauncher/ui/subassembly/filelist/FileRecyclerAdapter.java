@@ -125,65 +125,147 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         return name.endsWith(".txt") || name.endsWith(".log") || name.endsWith(".log.gz");
     }
 
-    /** reads the file (decompressing .gz) in the background, then copies the text to the clipboard */
+    private static final class ReadResult {
+        final String text;
+        final boolean truncated;
+
+        ReadResult(String text, boolean truncated) {
+            this.text = text;
+            this.truncated = truncated;
+        }
+    }
+
+    /** reads the file (decompressing .gz). If it is very big, only the END of it is kept. Returns null on failure. */
+    private static ReadResult readTextTail(File file) {
+        boolean truncated = false;
+        try (InputStream raw = new FileInputStream(file);
+             InputStream in = file.getName().toLowerCase(Locale.ROOT).endsWith(".gz")
+                     ? new GZIPInputStream(raw) : raw) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+                // keep only the end of the file in memory if it is very big
+                if (out.size() > MAX_COPY_BYTES * 2) {
+                    byte[] all = out.toByteArray();
+                    out.reset();
+                    out.write(all, all.length - MAX_COPY_BYTES, MAX_COPY_BYTES);
+                    truncated = true;
+                }
+            }
+            byte[] all = out.toByteArray();
+            if (all.length > MAX_COPY_BYTES) {
+                all = Arrays.copyOfRange(all, all.length - MAX_COPY_BYTES, all.length);
+                truncated = true;
+            }
+            return new ReadResult(new String(all, StandardCharsets.UTF_8), truncated);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static void showToast(Context context, String message) {
+        MAIN_HANDLER.post(() -> Toast.makeText(context, message, Toast.LENGTH_LONG).show());
+    }
+
+    /** "640 سطر (85 كيلوبايت)" */
+    private static String describe(String text) {
+        int lines = 1;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') lines++;
+        }
+        int kb = text.getBytes(StandardCharsets.UTF_8).length / 1024;
+        return lines + " سطر (" + kb + " كيلوبايت)";
+    }
+
+    private static void copyToClipboard(Context context, String text, String successMessage) {
+        MAIN_HANDLER.post(() -> {
+            try {
+                ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+                clipboard.setPrimaryClip(ClipData.newPlainText("log", text));
+                Toast.makeText(context, successMessage, Toast.LENGTH_LONG).show();
+            } catch (Throwable t) {
+                Toast.makeText(context, "فشل نسخ الملف", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    /** copies the whole content of the file */
     private static void copyFileContent(Context context, File file) {
         final Context appCtx = context.getApplicationContext();
         COPY_EXECUTOR.execute(() -> {
-            String text = null;
-            boolean truncated = false;
-            try (InputStream raw = new FileInputStream(file);
-                 InputStream in = file.getName().toLowerCase(Locale.ROOT).endsWith(".gz")
-                         ? new GZIPInputStream(raw) : raw) {
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                    // keep only the end of the file in memory if it is very big
-                    if (out.size() > MAX_COPY_BYTES * 2) {
-                        byte[] all = out.toByteArray();
-                        out.reset();
-                        out.write(all, all.length - MAX_COPY_BYTES, MAX_COPY_BYTES);
-                        truncated = true;
-                    }
-                }
-                byte[] all = out.toByteArray();
-                if (all.length > MAX_COPY_BYTES) {
-                    all = Arrays.copyOfRange(all, all.length - MAX_COPY_BYTES, all.length);
-                    truncated = true;
-                }
-                text = new String(all, StandardCharsets.UTF_8);
-            } catch (Throwable ignored) {
+            ReadResult result = readTextTail(file);
+            if (result == null) {
+                showToast(appCtx, "فشل نسخ الملف");
+                return;
             }
-
-            final String result = text;
-            final boolean cut = truncated;
-            MAIN_HANDLER.post(() -> {
-                if (result == null) {
-                    Toast.makeText(appCtx, "فشل نسخ الملف", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                if (result.isEmpty()) {
-                    Toast.makeText(appCtx, "الملف فارغ", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                try {
-                    ClipboardManager clipboard = (ClipboardManager) appCtx.getSystemService(Context.CLIPBOARD_SERVICE);
-                    clipboard.setPrimaryClip(ClipData.newPlainText("log", result));
-                    int lines = 1;
-                    for (int i = 0; i < result.length(); i++) {
-                        if (result.charAt(i) == '\n') lines++;
-                    }
-                    int kb = result.getBytes(StandardCharsets.UTF_8).length / 1024;
-                    String info = lines + " سطر (" + kb + " كيلوبايت)";
-                    Toast.makeText(appCtx,
-                            cut ? "تم نسخ آخر " + info + " فقط (الملف كبير)" : "تم نسخ " + info,
-                            Toast.LENGTH_LONG).show();
-                } catch (Throwable t) {
-                    Toast.makeText(appCtx, "فشل نسخ الملف", Toast.LENGTH_SHORT).show();
-                }
-            });
+            if (result.text.isEmpty()) {
+                showToast(appCtx, "الملف فارغ");
+                return;
+            }
+            String info = describe(result.text);
+            copyToClipboard(appCtx, result.text,
+                    result.truncated ? "تم نسخ آخر " + info + " فقط (الملف كبير)" : "تم نسخ " + info);
         });
+    }
+
+    /** copies only the errors of the file */
+    private static void copyErrorsOnly(Context context, File file) {
+        final Context appCtx = context.getApplicationContext();
+        COPY_EXECUTOR.execute(() -> {
+            ReadResult result = readTextTail(file);
+            if (result == null) {
+                showToast(appCtx, "فشل قراءة الملف");
+                return;
+            }
+            String errors = extractErrors(result.text);
+            if (errors.isEmpty()) {
+                showToast(appCtx, "ما لقيت أخطاء في هذا الملف");
+                return;
+            }
+            String message = "تم نسخ الأخطاء فقط: " + describe(errors)
+                    + (result.truncated ? " (من آخر 500 كيلوبايت)" : "");
+            copyToClipboard(appCtx, errors, message);
+        });
+    }
+
+    /** a new entry in a Minecraft log starts like "[13:33:52] [main/INFO]: ..." */
+    private static boolean isLogEntryStart(String line) {
+        if (line.length() < 3 || line.charAt(0) != '[') return false;
+        int index = line.indexOf("] [");
+        return index > 0 && index < 60;
+    }
+
+    private static boolean isErrorEntry(String line) {
+        String head = line.substring(0, Math.min(line.length(), 80));
+        return head.contains("/ERROR]") || head.contains("/FATAL]");
+    }
+
+    /**
+     * Log: every ERROR / FATAL entry with everything that belongs to it (stack trace, "Caused by"...).
+     * Crash report: the top part, which has the reason of the crash and the stack trace.
+     */
+    private static String extractErrors(String text) {
+        String[] lines = text.split("\n", -1);
+        StringBuilder sb = new StringBuilder();
+
+        if (text.contains("---- Minecraft Crash Report ----")) {
+            for (String line : lines) {
+                if (line.startsWith("A detailed walkthrough of the error")) break;
+                sb.append(line).append('\n');
+            }
+            return sb.toString().trim();
+        }
+
+        boolean inError = false;
+        for (String line : lines) {
+            if (isLogEntryStart(line)) {
+                inError = isErrorEntry(line);
+            }
+            if (inError) sb.append(line).append('\n');
+        }
+        return sb.toString().trim();
     }
 
     @NonNull
@@ -318,6 +400,11 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                     copyFileContent(context, mFileItemBean.file);
                 }
             });
+            binding.copyErrorsButton.setOnClickListener(v -> {
+                if (mFileItemBean != null && mFileItemBean.file != null) {
+                    copyErrorsOnly(context, mFileItemBean.file);
+                }
+            });
             if (mOnItemClickListener != null) {
                 itemView.setOnClickListener(v -> {
                     if (isMultiSelectMode) {
@@ -346,8 +433,10 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
 
             binding.name.setText(fileItemBean.name);
 
-            // copy button: only for log / text files
-            binding.copyButton.setVisibility(isCopyableTextFile(file) ? View.VISIBLE : View.GONE);
+            // copy buttons: only for log / text files
+            int copyVisibility = isCopyableTextFile(file) ? View.VISIBLE : View.GONE;
+            binding.copyButton.setVisibility(copyVisibility);
+            binding.copyErrorsButton.setVisibility(copyVisibility);
 
             int infoLayoutVisible = View.GONE;
             if (fileItemBean.date != null) {
