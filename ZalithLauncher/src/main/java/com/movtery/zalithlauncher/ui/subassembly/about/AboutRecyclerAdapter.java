@@ -55,6 +55,7 @@ public class AboutRecyclerAdapter extends RecyclerView.Adapter<AboutRecyclerAdap
                 AboutItemBean.AboutItemButtonBean buttonBean = data.getButtonBean();
                 String buttonName = buttonBean.getName();
 
+                binding.buttonView.setVisibility(View.VISIBLE);
                 binding.buttonView.setText(buttonName);
 
                 binding.buttonView.setOnClickListener(v -> {
