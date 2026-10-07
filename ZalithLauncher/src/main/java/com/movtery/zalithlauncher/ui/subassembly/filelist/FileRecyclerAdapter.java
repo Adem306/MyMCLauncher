@@ -170,9 +170,15 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                 try {
                     ClipboardManager clipboard = (ClipboardManager) appCtx.getSystemService(Context.CLIPBOARD_SERVICE);
                     clipboard.setPrimaryClip(ClipData.newPlainText("log", result));
+                    int lines = 1;
+                    for (int i = 0; i < result.length(); i++) {
+                        if (result.charAt(i) == '\n') lines++;
+                    }
+                    int kb = result.getBytes(StandardCharsets.UTF_8).length / 1024;
+                    String info = lines + " سطر (" + kb + " كيلوبايت)";
                     Toast.makeText(appCtx,
-                            cut ? "تم نسخ آخر 500 كيلوبايت فقط (الملف كبير)" : "تم نسخ محتوى الملف",
-                            Toast.LENGTH_SHORT).show();
+                            cut ? "تم نسخ آخر " + info + " فقط (الملف كبير)" : "تم نسخ " + info,
+                            Toast.LENGTH_LONG).show();
                 } catch (Throwable t) {
                     Toast.makeText(appCtx, "فشل نسخ الملف", Toast.LENGTH_SHORT).show();
                 }
