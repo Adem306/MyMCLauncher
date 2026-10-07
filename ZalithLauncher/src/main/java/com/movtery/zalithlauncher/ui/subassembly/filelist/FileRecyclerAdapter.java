@@ -86,15 +86,25 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         fetchIcons(appContext, force);
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     private void fetchIcons(Context context, boolean force) {
-        List<File> files = new ArrayList<>();
+        List<File> modFiles = new ArrayList<>();
+        List<File> packFiles = new ArrayList<>();
         for (FileItemBean bean : mData) {
             File f = bean.file;
-            if (f != null && f.isFile() && ModIconStore.isModJar(f)) files.add(f);
+            if (f == null || !f.isFile()) continue;
+            if (ModIconStore.isModJar(f)) {
+                modFiles.add(f);
+            } else {
+                int kind = PackIconStore.kindOf(f);
+                if (kind == PackIconStore.KIND_RESOURCEPACK || kind == PackIconStore.KIND_SHADER) packFiles.add(f);
+            }
         }
-        if (files.isEmpty()) return;
+        if (!modFiles.isEmpty()) fetchModIcons(context, modFiles, force);
+        if (!packFiles.isEmpty()) fetchPackIcons(context, packFiles, force);
+    }
 
+    @SuppressLint("NotifyDataSetChanged")
+    private void fetchModIcons(Context context, List<File> files, boolean force) {
         if (force) {
             Toast.makeText(context, "جاري فحص صور المودات...", Toast.LENGTH_SHORT).show();
         }
@@ -108,6 +118,30 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                 String message = total == 0
                         ? "كل المودات عندها صور"
                         : "تم تحميل " + found + " صورة من أصل " + total + " مود بدون صورة";
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show();
+            }
+        });
+        if (!started && force) {
+            Toast.makeText(context, "الفحص شغال حالياً، انتظر شوي", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** resource packs / shaders in .zip form that have no icon inside: looked up online (once, the result is saved) */
+    @SuppressLint("NotifyDataSetChanged")
+    private void fetchPackIcons(Context context, List<File> files, boolean force) {
+        if (force) {
+            Toast.makeText(context, "جاري فحص صور الريسورس باك والشادرات...", Toast.LENGTH_SHORT).show();
+        }
+
+        boolean started = PackIconStore.fetchMissing(context, files, force, (updated, total, found) -> {
+            for (File f : updated) {
+                ICON_CACHE.remove("pack:" + PackIconStore.keyFor(f));
+            }
+            if (!updated.isEmpty()) notifyDataSetChanged();
+            if (force) {
+                String message = total == 0
+                        ? "كل الملفات عندها صور"
+                        : "تم تحميل " + found + " صورة من أصل " + total + " ملف بدون صورة";
                 Toast.makeText(context, message, Toast.LENGTH_LONG).show();
             }
         });
@@ -519,6 +553,8 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                         .into(new DrawableImageViewTarget(binding.image));
             } else if (file != null && file.isFile() && ModIconStore.isModJar(file)) {
                 bindModIcon(file, fileItemBean);
+            } else if (PackIconStore.kindOf(file) != PackIconStore.KIND_NONE) {
+                bindPackIcon(file, fileItemBean, PackIconStore.kindOf(file));
             } else {
                 restoreImageStyle();
                 Glide.with(context).clear(binding.image);
@@ -526,10 +562,24 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             }
         }
 
-        /** small mark next to the name of a mod: white/black check = enabled (.jar), red cross = disabled (.jar.disabled) */
+        /**
+         * small mark before the name:
+         * - mods: check = enabled (.jar), red cross = disabled (.jar.disabled)
+         * - resource packs / shaders: folder mark = a folder, zip mark = a .zip file (no enabled / disabled mark)
+         */
         private void updateModStatus(File file) {
             binding.modStatus.setVisibility(View.GONE);
-            if (file == null || !file.isFile()) return;
+            if (file == null) return;
+
+            int kind = PackIconStore.kindOf(file);
+            if (kind == PackIconStore.KIND_RESOURCEPACK || kind == PackIconStore.KIND_SHADER) {
+                binding.modStatus.setImageResource(file.isDirectory() ? R.drawable.ic_pack_folder : R.drawable.ic_pack_zip);
+                binding.modStatus.setColorFilter(context.getResources().getColor(R.color.black_or_white, context.getTheme()));
+                binding.modStatus.setVisibility(View.VISIBLE);
+                return;
+            }
+
+            if (!file.isFile()) return;
 
             String name = file.getName().toLowerCase(Locale.ROOT);
             boolean disabled = name.endsWith(".jar.disabled");
@@ -582,6 +632,34 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             ICON_EXECUTOR.execute(() -> {
                 byte[] data = ModIconStore.readFromJar(file);          // 1) inside the jar
                 if (data == null) data = ModIconStore.readCached(appCtx, file); // 2) saved from the internet
+                final byte[] result = data;
+                ICON_CACHE.put(key, result == null ? NO_ICON : result);
+                MAIN_HANDLER.post(() -> {
+                    if (key.equals(boundKey)) showModIcon(result);
+                });
+            });
+        }
+
+        private void bindPackIcon(File file, FileItemBean bean, int kind) {
+            // default icon first, replaced if the pack / world has its own picture
+            restoreImageStyle();
+            setImageSize(modIconPx(), modIconPx());
+            Glide.with(context).clear(binding.image);
+            binding.image.setImageDrawable(bean.image);
+
+            final String key = "pack:" + PackIconStore.keyFor(file);
+            boundKey = key;
+
+            byte[] cached = ICON_CACHE.get(key);
+            if (cached != null) {
+                showModIcon(cached);
+                return;
+            }
+
+            final Context appCtx = context.getApplicationContext();
+            ICON_EXECUTOR.execute(() -> {
+                byte[] data = PackIconStore.readInside(file, kind);              // 1) inside the pack / world
+                if (data == null) data = PackIconStore.readCached(appCtx, file); // 2) saved from the internet
                 final byte[] result = data;
                 ICON_CACHE.put(key, result == null ? NO_ICON : result);
                 MAIN_HANDLER.post(() -> {
