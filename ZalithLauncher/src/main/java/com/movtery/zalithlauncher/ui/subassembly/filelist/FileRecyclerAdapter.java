@@ -389,7 +389,7 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
     public void setMultiSelectMode(boolean multiSelectMode) {
         isMultiSelectMode = multiSelectMode;
         if (!multiSelectMode) {
-            selectedFiles.clear(); // 退出多选模式时重置选择的文件
+            selectedFiles.clear();
         }
         notifyDataSetChanged();
     }
@@ -397,7 +397,7 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
     @SuppressLint("NotifyDataSetChanged")
     public void selectAllFiles(boolean selectAll) {
         selectedFiles.clear();
-        if (selectAll) { //全选时遍历全部item设置选择状态
+        if (selectAll) {
             for (FileItemBean item : mData) {
                 if (item.isCanCheck) {
                     selectedFiles.add(item);
@@ -467,16 +467,25 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                     toggleSelection(mFileItemBean, binding.check);
                 }
             });
+
             binding.copyButton.setOnClickListener(v -> {
                 if (mFileItemBean != null && mFileItemBean.file != null) {
                     copyFileContent(context, mFileItemBean.file);
                 }
             });
+
             binding.copyErrorsButton.setOnClickListener(v -> {
                 if (mFileItemBean != null && mFileItemBean.file != null) {
                     copyErrorsOnly(context, mFileItemBean.file);
                 }
             });
+
+            binding.copyModNameButton.setOnClickListener(v -> {
+                if (mFileItemBean != null && mFileItemBean.file != null) {
+                    copyModName(context, mFileItemBean.file);
+                }
+            });
+
             if (mOnItemClickListener != null) {
                 itemView.setOnClickListener(v -> {
                     if (isMultiSelectMode) {
@@ -486,6 +495,7 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                     }
                 });
             }
+
             itemView.setOnLongClickListener(v -> {
                 if (isMultiSelectMode) {
                     if (mOnMultiSelectListener != null)
@@ -510,6 +520,10 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             binding.copyButton.setVisibility(copyVisibility);
             binding.copyErrorsButton.setVisibility(copyVisibility);
 
+            // mod name copy button: only for mod jar files
+            boolean isModFile = file != null && file.isFile() && ModIconStore.isModJar(file);
+            binding.copyModNameButton.setVisibility(isModFile ? View.VISIBLE : View.GONE);
+
             updateModStatus(file);
 
             int infoLayoutVisible = View.GONE;
@@ -518,21 +532,30 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                 binding.time.setText(date);
                 binding.time.setVisibility(View.VISIBLE);
                 infoLayoutVisible = View.VISIBLE;
-            } else binding.time.setVisibility(View.GONE);
+            } else {
+                binding.time.setVisibility(View.GONE);
+            }
 
             if (fileItemBean.size != null) {
                 String size = FileTools.formatFileSize(fileItemBean.size);
                 binding.size.setText(size);
                 binding.size.setVisibility(View.VISIBLE);
                 infoLayoutVisible = View.VISIBLE;
-            } else binding.size.setVisibility(View.GONE);
+            } else {
+                binding.size.setVisibility(View.GONE);
+            }
 
             binding.infoLayout.setVisibility(infoLayoutVisible);
 
             if (fileItemBean.isHighlighted) {
-                binding.name.setTextColor(Color.rgb(69, 179, 162)); //设置高亮
+                binding.name.setTextColor(Color.rgb(69, 179, 162));
             } else {
-                binding.name.setTextColor(binding.name.getResources().getColor(R.color.black_or_white, binding.name.getContext().getTheme()));
+                binding.name.setTextColor(
+                        binding.name.getResources().getColor(
+                                R.color.black_or_white,
+                                binding.name.getContext().getTheme()
+                        )
+                );
             }
 
             if (fileItemBean.isCanCheck) {
@@ -562,19 +585,18 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             }
         }
 
-        /**
-         * small mark before the name:
-         * - mods: check = enabled (.jar), red cross = disabled (.jar.disabled)
-         * - resource packs / shaders: folder mark = a folder, zip mark = a .zip file (no enabled / disabled mark)
-         */
         private void updateModStatus(File file) {
             binding.modStatus.setVisibility(View.GONE);
             if (file == null) return;
 
             int kind = PackIconStore.kindOf(file);
             if (kind == PackIconStore.KIND_RESOURCEPACK || kind == PackIconStore.KIND_SHADER) {
-                binding.modStatus.setImageResource(file.isDirectory() ? R.drawable.ic_pack_folder : R.drawable.ic_pack_zip);
-                binding.modStatus.setColorFilter(context.getResources().getColor(R.color.black_or_white, context.getTheme()));
+                binding.modStatus.setImageResource(
+                        file.isDirectory() ? R.drawable.ic_pack_folder : R.drawable.ic_pack_zip
+                );
+                binding.modStatus.setColorFilter(
+                        context.getResources().getColor(R.color.black_or_white, context.getTheme())
+                );
                 binding.modStatus.setVisibility(View.VISIBLE);
                 return;
             }
@@ -586,16 +608,25 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             boolean enabled = name.endsWith(".jar") && ModIconStore.isModJar(file);
             if (!enabled && !disabled) return;
 
-            binding.modStatus.setImageResource(enabled ? R.drawable.ic_mod_enabled : R.drawable.ic_mod_disabled);
-            binding.modStatus.setColorFilter(enabled
-                    ? context.getResources().getColor(R.color.black_or_white, context.getTheme())
-                    : Color.rgb(255, 82, 82));
+            binding.modStatus.setImageResource(
+                    enabled ? R.drawable.ic_mod_enabled : R.drawable.ic_mod_disabled
+            );
+            binding.modStatus.setColorFilter(
+                    enabled
+                            ? context.getResources().getColor(R.color.black_or_white, context.getTheme())
+                            : Color.rgb(255, 82, 82)
+            );
             binding.modStatus.setVisibility(View.VISIBLE);
         }
 
         private void restoreImageStyle() {
             binding.image.setScaleType(origScaleType);
-            binding.image.setPadding(origPadLeft, origPadTop, origPadRight, origPadBottom);
+            binding.image.setPadding(
+                    origPadLeft,
+                    origPadTop,
+                    origPadRight,
+                    origPadBottom
+            );
             setImageSize(origWidth, origHeight);
         }
 
@@ -609,13 +640,13 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         }
 
         private int modIconPx() {
-            return (int) (MOD_ICON_SIZE_DP * context.getResources().getDisplayMetrics().density + 0.5f);
+            return (int) (MOD_ICON_SIZE_DP
+                    * context.getResources().getDisplayMetrics().density + 0.5f);
         }
 
         private void bindModIcon(File file, FileItemBean bean) {
-            // show the default icon first, replace it if the mod has its own logo
             restoreImageStyle();
-            setImageSize(modIconPx(), modIconPx()); // same size for every mod row, so the list does not jump
+            setImageSize(modIconPx(), modIconPx());
             Glide.with(context).clear(binding.image);
             binding.image.setImageDrawable(bean.image);
 
@@ -630,8 +661,10 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
 
             final Context appCtx = context.getApplicationContext();
             ICON_EXECUTOR.execute(() -> {
-                byte[] data = ModIconStore.readFromJar(file);          // 1) inside the jar
-                if (data == null) data = ModIconStore.readCached(appCtx, file); // 2) saved from the internet
+                byte[] data = ModIconStore.readFromJar(file);
+                if (data == null) {
+                    data = ModIconStore.readCached(appCtx, file);
+                }
                 final byte[] result = data;
                 ICON_CACHE.put(key, result == null ? NO_ICON : result);
                 MAIN_HANDLER.post(() -> {
@@ -641,7 +674,6 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         }
 
         private void bindPackIcon(File file, FileItemBean bean, int kind) {
-            // default icon first, replaced if the pack / world has its own picture
             restoreImageStyle();
             setImageSize(modIconPx(), modIconPx());
             Glide.with(context).clear(binding.image);
@@ -658,8 +690,10 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
 
             final Context appCtx = context.getApplicationContext();
             ICON_EXECUTOR.execute(() -> {
-                byte[] data = PackIconStore.readInside(file, kind);              // 1) inside the pack / world
-                if (data == null) data = PackIconStore.readCached(appCtx, file); // 2) saved from the internet
+                byte[] data = PackIconStore.readInside(file, kind);
+                if (data == null) {
+                    data = PackIconStore.readCached(appCtx, file);
+                }
                 final byte[] result = data;
                 ICON_CACHE.put(key, result == null ? NO_ICON : result);
                 MAIN_HANDLER.post(() -> {
@@ -669,7 +703,7 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
         }
 
         private void showModIcon(byte[] data) {
-            if (data == null || data.length == 0) return; // keep the default icon
+            if (data == null || data.length == 0) return;
 
             binding.image.setPadding(0, 0, 0, 0);
             binding.image.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -682,4 +716,30 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                     .into(new DrawableImageViewTarget(binding.image));
         }
     }
-}
+
+    /**
+     * Copies the full file name of a mod, including its extension.
+     */
+    private static void copyModName(Context context, File file) {
+        try {
+            ClipboardManager clipboard =
+                    (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+
+            clipboard.setPrimaryClip(
+                    ClipData.newPlainText("Mod name", file.getName())
+            );
+
+            Toast.makeText(
+                    context,
+                    "تم نسخ اسم المود",
+                    Toast.LENGTH_SHORT
+            ).show();
+        } catch (Throwable t) {
+            Toast.makeText(
+                    context,
+                    "فشل نسخ اسم المود",
+                    Toast.LENGTH_SHORT
+            ).show();
+        }
+    }
+        }
