@@ -1,5 +1,7 @@
 package com.movtery.zalithlauncher.ui.subassembly.modlist
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Paint
 import android.graphics.drawable.Drawable
@@ -10,6 +12,7 @@ import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.view.animation.LayoutAnimationController
 import android.widget.CheckBox
+import android.widget.Toast
 import androidx.annotation.CallSuper
 import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -69,6 +72,9 @@ abstract class ModListFragment : FragmentWithAnim(R.layout.fragment_mod_download
             refreshButton.setOnClickListener { refreshTask() }
             releaseVersion.setOnClickListener { initRefresh() }
             returnButton.setOnClickListener { ZHTools.onBackPressed(requireActivity()) }
+            copyNameButton.setOnClickListener {
+                copyToClipboard(title.text?.toString(), "تم نسخ اسم المود")
+            }
 
             backToTop.setOnClickListener { recyclerView.smoothScrollToPosition(0) }
         }
@@ -213,7 +219,19 @@ abstract class ModListFragment : FragmentWithAnim(R.layout.fragment_mod_download
                 this.setOnClickListener { ZHTools.openLink(fragmentActivity, uri) }
                 AnimUtils.setVisibilityAnim(this, true)
             }
+            binding.copyLinkButton.apply {
+                setOnClickListener { copyToClipboard(uri, "تم نسخ الرابط") }
+                AnimUtils.setVisibilityAnim(this, true)
+            }
         }
+    }
+
+    private fun copyToClipboard(text: String?, message: String) {
+        if (text.isNullOrBlank()) return
+        val context = requireContext()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("text", text))
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
     protected fun setMCMod(link: String?) {
