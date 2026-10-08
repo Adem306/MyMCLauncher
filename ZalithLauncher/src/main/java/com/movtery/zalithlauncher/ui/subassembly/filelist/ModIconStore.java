@@ -778,4 +778,115 @@ public final class ModIconStore {
 
         return null;
     }
+
+    // ================= platform availability (batch) =================
+
+    /** Result of looking one mod file up on both platforms. A null Boolean means unknown (the request failed). */
+    public static final class PlatformInfo {
+        public final Boolean onModrinth;
+        public final String modrinthId;
+        public final Boolean onCurseForge;
+        public final Long curseForgeId;
+
+        PlatformInfo(Boolean onModrinth, String modrinthId, Boolean onCurseForge, Long curseForgeId) {
+            this.onModrinth = onModrinth;
+            this.modrinthId = modrinthId;
+            this.onCurseForge = onCurseForge;
+            this.curseForgeId = curseForgeId;
+        }
+
+        public boolean isComplete() {
+            return onModrinth != null && onCurseForge != null;
+        }
+    }
+
+    /**
+     * Looks a small group of mod files up on Modrinth (SHA-1) and CurseForge (fingerprint),
+     * one request per platform for the whole group. Must be called off the main thread.
+     */
+    public static Map<File, PlatformInfo> lookupPlatforms(List<File> files) {
+        Map<File, PlatformInfo> out = new HashMap<>();
+        Map<File, String> shaOf = new HashMap<>();
+        Map<File, Long> fpOf = new HashMap<>();
+        Set<String> hashes = new LinkedHashSet<>();
+        Set<Long> fps = new LinkedHashSet<>();
+
+        for (File f : files) {
+            try {
+                String h = hex(fileSha1(f));
+                long fp = curseFingerprint(f);
+                shaOf.put(f, h);
+                fpOf.put(f, fp);
+                hashes.add(h);
+                fps.add(fp);
+            } catch (IOException ignored) {
+            }
+        }
+        if (hashes.isEmpty()) return out;
+
+        Map<String, String> modrinth = null;
+        try {
+            modrinth = modrinthProjectsByHash(hashes);
+        } catch (Exception ignored) {
+        }
+
+        String cfKey = InfoDistributor.CURSEFORGE_API_KEY;
+        boolean hasCfKey = cfKey != null && !cfKey.trim().isEmpty() && !"DUMMY".equals(cfKey.trim());
+        Map<Long, Long> curse = null;
+        if (!hasCfKey) {
+            curse = new HashMap<>();
+        } else {
+            try {
+                curse = curseForgeModsByFingerprint(cfKey.trim(), fps);
+            } catch (Exception ignored) {
+            }
+        }
+
+        for (File f : shaOf.keySet()) {
+            String projectId = modrinth == null ? null : modrinth.get(shaOf.get(f));
+            Long modId = curse == null ? null : curse.get(fpOf.get(f));
+            Boolean onMr = modrinth == null ? null : Boolean.valueOf(projectId != null);
+            Boolean onCf = curse == null ? null : Boolean.valueOf(modId != null);
+            out.put(f, new PlatformInfo(onMr, projectId, onCf, modId));
+        }
+        return out;
+    }
+
+    /** @return map: sha1 -> project id (only for hashes Modrinth knows) */
+    private static Map<String, String> modrinthProjectsByHash(Set<String> hashes) throws Exception {
+        Map<String, String> result = new HashMap<>();
+        JSONObject body = new JSONObject();
+        body.put("hashes", new JSONArray(hashes));
+        body.put("algorithm", "sha1");
+        JSONObject versions = new JSONObject(post("https://api.modrinth.com/v2/version_files", body.toString(), null));
+        Iterator<String> keys = versions.keys();
+        while (keys.hasNext()) {
+            String hash = keys.next();
+            JSONObject version = versions.optJSONObject(hash);
+            String id = version == null ? null : str(version, "project_id");
+            if (id != null && !id.isEmpty()) result.put(hash, id);
+        }
+        return result;
+    }
+
+    /** @return map: fingerprint -> mod id (only for fingerprints CurseForge knows) */
+    private static Map<Long, Long> curseForgeModsByFingerprint(String apiKey, Set<Long> fingerprints) throws Exception {
+        Map<Long, Long> result = new HashMap<>();
+        JSONObject body = new JSONObject();
+        body.put("fingerprints", new JSONArray(fingerprints));
+        JSONObject root = new JSONObject(post("https://api.curseforge.com/v1/fingerprints/432", body.toString(), apiKey));
+        JSONObject data = root.optJSONObject("data");
+        JSONArray matches = data == null ? null : data.optJSONArray("exactMatches");
+        if (matches == null) return result;
+        for (int i = 0; i < matches.length(); i++) {
+            JSONObject m = matches.optJSONObject(i);
+            if (m == null) continue;
+            JSONObject file = m.optJSONObject("file");
+            if (file == null) continue;
+            long fp = file.optLong("fileFingerprint", 0);
+            long modId = file.optLong("modId", m.optLong("id", 0));
+            if (fp != 0 && modId != 0) result.put(fp, modId);
+        }
+        return result;
+    }
 }
