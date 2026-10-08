@@ -9,8 +9,11 @@ import androidx.core.content.ContextCompat
 import com.movtery.zalithlauncher.InfoCenter
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.databinding.ActivityErrorBinding
+import com.movtery.zalithlauncher.ui.subassembly.filelist.FileRecyclerAdapter
 import com.movtery.zalithlauncher.utils.ZHTools
+import com.movtery.zalithlauncher.utils.path.PathManager
 import net.kdt.pojavlaunch.Tools
+import java.io.File
 
 class ErrorActivity : BaseActivity() {
     private lateinit var binding: ActivityErrorBinding
@@ -85,9 +88,20 @@ class ErrorActivity : BaseActivity() {
             }
             this.errorTip.visibility = View.VISIBLE
             this.errorNoScreenshot.visibility = View.VISIBLE
+            this.copyLog.visibility = View.VISIBLE
+            this.copyErrors.visibility = View.VISIBLE
 
             this.topView.setBackgroundColor(ContextCompat.getColor(context, R.color.background_menu_top))
             this.background.setBackgroundColor(ContextCompat.getColor(context, R.color.background_app))
+        }
+
+        val latestLogFile = File(PathManager.DIR_GAME_HOME, "latestlog.txt")
+
+        binding.copyLog.setOnClickListener {
+            FileRecyclerAdapter.copyLogFile(this, latestLogFile)
+        }
+        binding.copyErrors.setOnClickListener {
+            FileRecyclerAdapter.copyLogErrorsOnly(this, latestLogFile)
         }
     }
 
