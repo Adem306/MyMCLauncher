@@ -2,6 +2,9 @@ package com.kdt;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -17,6 +20,10 @@ import com.movtery.zalithlauncher.utils.anim.ViewAnimUtils;
 
 import net.kdt.pojavlaunch.Logger;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
 /**
  * A class able to display logs to the user.
  * It has support for the Logger class
@@ -25,6 +32,33 @@ public class LoggerView extends ConstraintLayout {
     private Logger.eventLogListener mLogListener;
     private ViewLoggerBinding binding;
     private boolean isShowing = false;
+
+    private static final int TYPE_NORMAL = 0;
+    private static final int TYPE_ERROR = 1;
+    private static final int TYPE_WARN = 2;
+    private static final int TYPE_CHAT = 3;
+
+    private static final int COLOR_NORMAL = 0xFFFFFFFF;
+    private static final int COLOR_ERROR = 0xFFFF5555;
+    private static final int COLOR_WARN = 0xFFFFA500;
+    private static final int COLOR_CHAT = 0xFFFFFF55;
+
+    private static final int MAX_LINES = 5000;
+    private static final int TRIM_LINES = 1000;
+
+    private static class Entry {
+        final String text;
+        final int type;
+
+        Entry(String text, int type) {
+            this.text = text;
+            this.type = type;
+        }
+    }
+
+    private final List<Entry> mEntries = new ArrayList<>();
+    private boolean mProblemsOnly = false;
+    private int mLastType = TYPE_NORMAL;
 
     public LoggerView(@NonNull Context context) {
         this(context, null);
@@ -85,6 +119,8 @@ public class LoggerView extends ConstraintLayout {
                         Logger.setLogListener(mLogListener);
                     } else {
                         binding.logView.setText("");
+                        mEntries.clear();
+                        mLastType = TYPE_NORMAL;
                         Logger.setLogListener(null); // Makes the JNI code be able to skip expensive logger callbacks
                         // NOTE: was tested by rapidly smashing the log on/off button, no sync issues found :)
                     }
@@ -106,15 +142,95 @@ public class LoggerView extends ConstraintLayout {
         );
         binding.toggleAutoscroll.setChecked(true);
 
+        // Filter buttons
+        binding.filterAll.setOnClickListener(v -> setProblemsOnly(false));
+        binding.filterProblems.setOnClickListener(v -> setProblemsOnly(true));
+        binding.filterAll.setChecked(true);
+        binding.filterProblems.setChecked(false);
+
         // Listen to logs
         mLogListener = text -> {
             if (binding.logView.getVisibility() != VISIBLE) return;
             post(() -> {
-                binding.logView.append(text + '\n');
+                Entry entry = new Entry(text, classify(text));
+                mEntries.add(entry);
+
+                if (mEntries.size() > MAX_LINES) {
+                    mEntries.subList(0, TRIM_LINES).clear();
+                    rebuildText();
+                } else if (!mProblemsOnly || isProblem(entry)) {
+                    binding.logView.append(buildLine(entry));
+                }
+
                 if (binding.scroll.isKeepFocusing())
                     binding.scroll.fullScroll(View.FOCUS_DOWN);
             });
         };
+    }
+
+    private void setProblemsOnly(boolean problemsOnly) {
+        binding.filterAll.setChecked(!problemsOnly);
+        binding.filterProblems.setChecked(problemsOnly);
+        if (mProblemsOnly == problemsOnly) return;
+        mProblemsOnly = problemsOnly;
+        rebuildText();
+        if (binding.scroll.isKeepFocusing())
+            binding.scroll.post(() -> binding.scroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    private void rebuildText() {
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        for (Entry entry : mEntries) {
+            if (!mProblemsOnly || isProblem(entry)) builder.append(buildLine(entry));
+        }
+        binding.logView.setText(builder);
+    }
+
+    private boolean isProblem(Entry entry) {
+        return entry.type == TYPE_ERROR || entry.type == TYPE_WARN;
+    }
+
+    private CharSequence buildLine(Entry entry) {
+        SpannableStringBuilder line = new SpannableStringBuilder(entry.text).append('\n');
+        int color;
+        switch (entry.type) {
+            case TYPE_ERROR: color = COLOR_ERROR; break;
+            case TYPE_WARN: color = COLOR_WARN; break;
+            case TYPE_CHAT: color = COLOR_CHAT; break;
+            default: color = COLOR_NORMAL; break;
+        }
+        line.setSpan(new ForegroundColorSpan(color), 0, line.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return line;
+    }
+
+    /**
+     * Decides the line type. Stack-trace lines that follow an error stay as errors.
+     */
+    private int classify(String text) {
+        String upper = text.toUpperCase(Locale.ROOT);
+        String trimmed = text.trim();
+        int type;
+
+        if (upper.contains("/ERROR]") || upper.contains("/FATAL]")
+                || upper.contains("EXCEPTION") || trimmed.startsWith("Caused by")
+                || upper.contains("MALFORMEDJSON") || upper.contains("FATAL")) {
+            type = TYPE_ERROR;
+        } else if (mLastType == TYPE_ERROR
+                && (trimmed.startsWith("at ") || trimmed.startsWith("...")
+                || trimmed.startsWith("Suppressed:"))) {
+            type = TYPE_ERROR;
+        } else if (upper.contains("/WARN]") || upper.contains("[WARN]")) {
+            type = TYPE_WARN;
+        } else if (text.contains("[CHAT]") || text.contains("issued server command")
+                || text.contains("[Not Secure]")
+                || text.contains("Server thread/INFO]: <")) {
+            type = TYPE_CHAT;
+        } else {
+            type = TYPE_NORMAL;
+        }
+
+        mLastType = type;
+        return type;
     }
 
     public ViewLoggerBinding getBinding() {
