@@ -102,11 +102,30 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
 
         if (!modFiles.isEmpty()) {
             fetchModIcons(context, modFiles, force);
+            fetchPlatformAvailability(modFiles, force);
         }
 
         if (!packFiles.isEmpty()) {
             fetchPackIcons(context, packFiles, force);
         }
+    }
+
+    /**
+     * Checks in the background (5 mods at a time) where each mod exists,
+     * and refreshes only the rows that got a result.
+     */
+    private void fetchPlatformAvailability(List<File> files, boolean force) {
+        ModAvailabilityChecker.check(files, force, updated -> {
+            for (File f : updated) {
+                for (int i = 0; i < mData.size(); i++) {
+                    File bound = mData.get(i).file;
+                    if (bound != null && bound.equals(f)) {
+                        notifyItemChanged(i);
+                        break;
+                    }
+                }
+            }
+        });
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -876,10 +895,34 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                             : View.GONE
             );
 
-            binding.platformButtons.setVisibility(
+            ModIconStore.PlatformInfo platformInfo =
                     isModFile
+                            ? ModAvailabilityChecker.get(file)
+                            : null;
+
+            boolean onCurseForge =
+                    platformInfo != null
+                            && Boolean.TRUE.equals(platformInfo.onCurseForge);
+
+            boolean onModrinth =
+                    platformInfo != null
+                            && Boolean.TRUE.equals(platformInfo.onModrinth);
+
+            // shown only after the check found the mod on at least one platform
+            binding.platformButtons.setVisibility(
+                    (onCurseForge || onModrinth)
                             ? View.VISIBLE
                             : View.GONE
+            );
+
+            applyPlatformButton(
+                    binding.curseforgeButton,
+                    onCurseForge
+            );
+
+            applyPlatformButton(
+                    binding.modrinthButton,
+                    onModrinth
             );
 
             updateModStatus(file);
@@ -1012,6 +1055,13 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
                         fileItemBean.image
                 );
             }
+        }
+
+        /** Available: normal and clickable. Not available: transparent and not clickable. */
+        private void applyPlatformButton(View button, boolean available) {
+            button.setEnabled(available);
+            button.setClickable(available);
+            button.setAlpha(available ? 1f : 0.25f);
         }
 
         private void updateModStatus(File file) {
