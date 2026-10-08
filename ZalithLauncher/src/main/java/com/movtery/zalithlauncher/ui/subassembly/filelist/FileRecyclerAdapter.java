@@ -1391,4 +1391,12 @@ public class FileRecyclerAdapter extends RecyclerView.Adapter<FileRecyclerAdapte
             ).show();
         }
     }
-        }
+
+    public static void copyLogFile(Context context, File file) {
+        copyFileContent(context, file);
+    }
+
+    public static void copyLogErrorsOnly(Context context, File file) {
+        copyErrorsOnly(context, file);
+    }
+}
