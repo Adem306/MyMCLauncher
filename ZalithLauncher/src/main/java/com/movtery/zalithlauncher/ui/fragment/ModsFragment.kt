@@ -9,6 +9,8 @@ import android.widget.CompoundButton
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.lifecycle.ViewModelProvider
 import com.getkeepsafe.taptargetview.TapTargetSequence
 import com.movtery.anim.AnimPlayer
@@ -45,6 +47,11 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
     companion object {
         const val TAG: String = "ModsFragment"
         const val BUNDLE_ROOT_PATH: String = "root_path"
+
+        // Where the list was when a mod page was opened; restored once on return
+        private var savedScrollPath: String? = null
+        private var savedScrollPosition: Int = 0
+        private var savedScrollOffset: Int = 0
     }
 
     private lateinit var binding: FragmentModsBinding
@@ -378,6 +385,7 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                         nothingLayout,
                         isNoFile
                     )
+                    restoreScrollPosition()
                 }
             }
 
@@ -627,6 +635,8 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
             infoViewModel.platformHelper =
                 platform.helper.copy()
 
+            saveScrollPosition()
+
             ZHTools.swapFragmentWithAnim(
                 this,
                 DownloadModFragment::class.java,
@@ -643,6 +653,36 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
 
             Tools.showErrorRemote(error)
         }.execute()
+    }
+
+    private fun getListLayoutManager(): LinearLayoutManager? {
+        val list = binding.fileRecyclerView.getChildAt(0) as? RecyclerView
+        return list?.layoutManager as? LinearLayoutManager
+    }
+
+    /** Remembers the current list position (called when a mod page is opened). */
+    private fun saveScrollPosition() {
+        val layoutManager = getListLayoutManager() ?: return
+        val position = layoutManager.findFirstVisibleItemPosition()
+        if (position == RecyclerView.NO_POSITION) return
+
+        savedScrollPath = mRootPath
+        savedScrollPosition = position
+        savedScrollOffset = layoutManager.findViewByPosition(position)?.top ?: 0
+    }
+
+    /** Puts the list back where it was, once, then forgets it. */
+    private fun restoreScrollPosition() {
+        if (savedScrollPath != mRootPath) return
+
+        val position = savedScrollPosition
+        val offset = savedScrollOffset
+        savedScrollPath = null
+
+        val layoutManager = getListLayoutManager() ?: return
+        if (position in 0 until layoutManager.itemCount) {
+            layoutManager.scrollToPositionWithOffset(position, offset)
+        }
     }
 
     private fun startNewbieGuide() {
