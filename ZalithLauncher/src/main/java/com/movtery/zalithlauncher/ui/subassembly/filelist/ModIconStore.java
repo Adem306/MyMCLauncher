@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -886,6 +887,130 @@ public final class ModIconStore {
             long fp = file.optLong("fileFingerprint", 0);
             long modId = file.optLong("modId", m.optLong("id", 0));
             if (fp != 0 && modId != 0) result.put(fp, modId);
+        }
+        return result;
+    }
+
+    // ================= page links for many mods =================
+
+    /**
+     * Returns the page link of each mod file: Modrinth first, CurseForge if it is not on Modrinth.
+     * Files that were not found are missing from the result. Must be called off the main thread.
+     */
+    public static Map<File, String> lookupPageLinks(List<File> files) {
+        Map<File, String> out = new LinkedHashMap<>();
+        Map<File, PlatformInfo> infos = new HashMap<>();
+        List<File> unknown = new ArrayList<>();
+
+        for (File f : files) {
+            PlatformInfo cached = ModAvailabilityChecker.get(f);
+            if (cached != null && cached.isComplete()) {
+                infos.put(f, cached);
+            } else {
+                unknown.add(f);
+            }
+        }
+        if (!unknown.isEmpty()) {
+            try {
+                infos.putAll(lookupPlatforms(unknown));
+            } catch (Throwable ignored) {
+            }
+        }
+
+        Set<Long> curseIds = new LinkedHashSet<>();
+        Set<String> modrinthIds = new LinkedHashSet<>();
+        for (File f : files) {
+            PlatformInfo info = infos.get(f);
+            if (info == null) continue;
+            if (Boolean.TRUE.equals(info.onCurseForge) && info.curseForgeId != null) {
+                curseIds.add(info.curseForgeId);
+            }
+            if (Boolean.TRUE.equals(info.onModrinth) && info.modrinthId != null) {
+                modrinthIds.add(info.modrinthId);
+            }
+        }
+
+        Map<Long, String> curseLinks = new HashMap<>();
+        try {
+            curseLinks = curseForgeLinks(curseIds);
+        } catch (Throwable ignored) {
+        }
+
+        Map<String, String> modrinthLinks = new HashMap<>();
+        try {
+            modrinthLinks = modrinthLinks(modrinthIds);
+        } catch (Throwable ignored) {
+        }
+
+        for (File f : files) {
+            PlatformInfo info = infos.get(f);
+            if (info == null) continue;
+
+            String link = null;
+            if (info.modrinthId != null) link = modrinthLinks.get(info.modrinthId);
+            if (link == null && info.curseForgeId != null) link = curseLinks.get(info.curseForgeId);
+            if (link != null) out.put(f, link);
+        }
+        return out;
+    }
+
+    /** @return map: mod id -> page url */
+    private static Map<Long, String> curseForgeLinks(Set<Long> modIds) throws Exception {
+        Map<Long, String> result = new HashMap<>();
+        String apiKey = InfoDistributor.CURSEFORGE_API_KEY;
+        if (modIds.isEmpty() || apiKey == null || apiKey.trim().isEmpty() || "DUMMY".equals(apiKey.trim())) {
+            return result;
+        }
+
+        List<Long> ids = new ArrayList<>(modIds);
+        for (int i = 0; i < ids.size(); i += 50) {
+            List<Long> chunk = ids.subList(i, Math.min(i + 50, ids.size()));
+            JSONObject req = new JSONObject();
+            req.put("modIds", new JSONArray(chunk));
+            JSONObject root = new JSONObject(post("https://api.curseforge.com/v1/mods", req.toString(), apiKey.trim()));
+            JSONArray mods = root.optJSONArray("data");
+            if (mods == null) continue;
+            for (int j = 0; j < mods.length(); j++) {
+                JSONObject mod = mods.optJSONObject(j);
+                if (mod == null) continue;
+
+                String url = null;
+                JSONObject links = mod.optJSONObject("links");
+                if (links != null) url = str(links, "websiteUrl");
+                if (url == null || url.isEmpty()) {
+                    String slug = str(mod, "slug");
+                    if (slug != null && !slug.isEmpty()) {
+                        url = "https://www.curseforge.com/minecraft/mc-mods/" + slug;
+                    }
+                }
+                if (url != null && !url.isEmpty()) result.put(mod.optLong("id"), url);
+            }
+        }
+        return result;
+    }
+
+    /** @return map: project id -> page url */
+    private static Map<String, String> modrinthLinks(Set<String> projectIds) throws Exception {
+        Map<String, String> result = new HashMap<>();
+        if (projectIds.isEmpty()) return result;
+
+        List<String> ids = new ArrayList<>(projectIds);
+        for (int i = 0; i < ids.size(); i += 40) {
+            List<String> chunk = ids.subList(i, Math.min(i + 40, ids.size()));
+            String url = "https://api.modrinth.com/v2/projects?ids="
+                    + URLEncoder.encode(new JSONArray(chunk).toString(), "UTF-8");
+            JSONArray projects = new JSONArray(get(url));
+            for (int j = 0; j < projects.length(); j++) {
+                JSONObject p = projects.optJSONObject(j);
+                if (p == null) continue;
+                String id = str(p, "id");
+                String slug = str(p, "slug");
+                String type = str(p, "project_type");
+                if (type == null || type.isEmpty()) type = "mod";
+                if (id != null && slug != null && !slug.isEmpty()) {
+                    result.put(id, "https://modrinth.com/" + type + "/" + slug);
+                }
+            }
         }
         return result;
     }
