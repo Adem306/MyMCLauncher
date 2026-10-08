@@ -64,21 +64,25 @@
         android:id="@+id/filter_all_dot"
         android:layout_width="@dimen/_8sdp"
         android:layout_height="@dimen/_8sdp"
-        android:layout_marginStart="@dimen/_4sdp"
-        android:layout_marginTop="@dimen/_4sdp"
+        android:layout_marginRight="@dimen/_6sdp"
+        android:layout_marginBottom="@dimen/_8sdp"
         android:background="@drawable/log_filter_dot_on"
-        app:layout_constraintStart_toStartOf="@+id/filter_all"
-        app:layout_constraintTop_toTopOf="@+id/filter_all" />
+        android:elevation="10dp"
+        android:translationZ="10dp"
+        app:layout_constraintBottom_toBottomOf="@+id/filter_all"
+        app:layout_constraintRight_toRightOf="@+id/filter_all" />
 
     <View
         android:id="@+id/filter_problems_dot"
         android:layout_width="@dimen/_8sdp"
         android:layout_height="@dimen/_8sdp"
-        android:layout_marginStart="@dimen/_4sdp"
-        android:layout_marginTop="@dimen/_4sdp"
+        android:layout_marginRight="@dimen/_6sdp"
+        android:layout_marginBottom="@dimen/_8sdp"
         android:background="@drawable/log_filter_dot_off"
-        app:layout_constraintStart_toStartOf="@+id/filter_problems"
-        app:layout_constraintTop_toTopOf="@+id/filter_problems" />
+        android:elevation="10dp"
+        android:translationZ="10dp"
+        app:layout_constraintBottom_toBottomOf="@+id/filter_problems"
+        app:layout_constraintRight_toRightOf="@+id/filter_problems" />
 
     <ToggleButton
         android:id="@+id/toggle_autoscroll"
