@@ -138,7 +138,27 @@
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="@dimen/_8sdp"
             android:text="@string/main_share_logs"
-            app:layout_constraintBottom_toTopOf="@id/error_restart"/>
+            app:layout_constraintBottom_toTopOf="@id/copy_log"/>
+
+        <com.movtery.zalithlauncher.ui.view.AnimButton
+            android:id="@+id/copy_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/_8sdp"
+            android:text="نسخ السجل"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@id/copy_errors"
+            tools:ignore="HardcodedText"/>
+
+        <com.movtery.zalithlauncher.ui.view.AnimButton
+            android:id="@+id/copy_errors"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/_8sdp"
+            android:text="نسخ الأخطاء فقط"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@id/error_restart"
+            tools:ignore="HardcodedText"/>
 
         <com.movtery.zalithlauncher.ui.view.AnimButton
             android:id="@+id/error_restart"
