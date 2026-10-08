@@ -84,7 +84,7 @@
         android:layout_height="@dimen/_28sdp"
         android:layout_marginEnd="@dimen/_2sdp"
         android:contentDescription="Copy errors"
-        android:src="@drawable/ic_copy"
+        android:src="@drawable/ic_copy_errors"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@+id/copy_button"
