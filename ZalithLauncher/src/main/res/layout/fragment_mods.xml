@@ -141,6 +141,22 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent">
 
+                <ImageView
+                    android:id="@+id/copy_links_button"
+                    android:layout_width="@dimen/_28sdp"
+                    android:layout_height="@dimen/_28sdp"
+                    android:layout_marginTop="@dimen/_16sdp"
+                    android:layout_marginEnd="@dimen/_12sdp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Copy links"
+                    android:padding="@dimen/_2sdp"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_copy_link"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    tools:ignore="HardcodedText" />
+
                 <com.movtery.zalithlauncher.ui.view.AnimCheckBox
                     android:id="@+id/multi_select_files"
                     android:layout_width="0dp"
