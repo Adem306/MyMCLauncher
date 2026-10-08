@@ -1,5 +1,7 @@
 package com.kdt;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
@@ -8,12 +10,14 @@ import android.text.style.ForegroundColorSpan;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.constraintlayout.widget.ConstraintLayout;
 
 import com.movtery.anim.animations.Animations;
+import com.movtery.zalithlauncher.R;
 import com.movtery.zalithlauncher.databinding.ViewLoggerBinding;
 import com.movtery.zalithlauncher.setting.AllSettings;
 import com.movtery.zalithlauncher.utils.anim.ViewAnimUtils;
@@ -45,6 +49,7 @@ public class LoggerView extends ConstraintLayout {
 
     private static final int MAX_LINES = 5000;
     private static final int TRIM_LINES = 1000;
+    private static final int MAX_COPY_CHARS = 500_000;
 
     private static class Entry {
         final String text;
@@ -147,6 +152,8 @@ public class LoggerView extends ConstraintLayout {
         binding.filterProblems.setOnClickListener(v -> setProblemsOnly(true));
         binding.filterAll.setChecked(true);
         binding.filterProblems.setChecked(false);
+        updateFilterUi();
+        binding.copyLogView.setOnClickListener(v -> copyCurrentView());
 
         // Listen to logs
         mLogListener = text -> {
@@ -173,9 +180,53 @@ public class LoggerView extends ConstraintLayout {
         binding.filterProblems.setChecked(problemsOnly);
         if (mProblemsOnly == problemsOnly) return;
         mProblemsOnly = problemsOnly;
+        updateFilterUi();
         rebuildText();
         if (binding.scroll.isKeepFocusing())
             binding.scroll.post(() -> binding.scroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    private void updateFilterUi() {
+        binding.filterAllDot.setBackgroundResource(
+                mProblemsOnly ? R.drawable.log_filter_dot_off : R.drawable.log_filter_dot_on);
+        binding.filterProblemsDot.setBackgroundResource(
+                mProblemsOnly ? R.drawable.log_filter_dot_on : R.drawable.log_filter_dot_off);
+        binding.copyLogView.setText(mProblemsOnly ? "نسخ الأخطاء" : "نسخ الكل");
+    }
+
+    /**
+     * Copies exactly what the current filter shows (all lines, or errors/warnings only).
+     */
+    private void copyCurrentView() {
+        StringBuilder sb = new StringBuilder();
+        boolean truncated = false;
+
+        for (int i = mEntries.size() - 1; i >= 0; i--) {
+            Entry entry = mEntries.get(i);
+            if (mProblemsOnly && !isProblem(entry)) continue;
+            if (sb.length() + entry.text.length() + 1 > MAX_COPY_CHARS) {
+                truncated = true;
+                break;
+            }
+            sb.insert(0, entry.text + '\n');
+        }
+
+        Context context = getContext();
+        if (sb.length() == 0) {
+            Toast.makeText(context, "لا يوجد ما يُنسخ", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        try {
+            ClipboardManager clipboard =
+                    (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+            clipboard.setPrimaryClip(ClipData.newPlainText("Log", sb.toString()));
+            String message = mProblemsOnly ? "تم نسخ الأخطاء" : "تم نسخ السجل كاملًا";
+            if (truncated) message += " (آخر الأسطر فقط، السجل كبير)";
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Toast.makeText(context, "فشل النسخ", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void rebuildText() {
