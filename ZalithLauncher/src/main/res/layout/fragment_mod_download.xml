@@ -241,6 +241,29 @@
                     tools:ignore="HardcodedText" />
 
                 <ImageView
+                    android:id="@+id/copy_name_button"
+                    android:layout_width="@dimen/_24sdp"
+                    android:layout_height="@dimen/_24sdp"
+                    android:layout_marginEnd="@dimen/_12sdp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Copy mod name"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_copy_name"
+                    tools:ignore="HardcodedText" />
+
+                <ImageView
+                    android:id="@+id/copy_link_button"
+                    android:layout_width="@dimen/_24sdp"
+                    android:layout_height="@dimen/_24sdp"
+                    android:layout_marginEnd="@dimen/_12sdp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Copy link"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_copy_link"
+                    android:visibility="gone"
+                    tools:ignore="HardcodedText" />
+
+                <ImageView
                     android:id="@+id/launch_link"
                     android:layout_width="@dimen/_24sdp"
                     android:layout_height="@dimen/_24sdp"
