@@ -30,6 +30,7 @@ import com.movtery.zalithlauncher.ui.subassembly.filelist.FileIcon
 import com.movtery.zalithlauncher.ui.subassembly.filelist.FileItemBean
 import com.movtery.zalithlauncher.ui.subassembly.filelist.FileRecyclerAdapter
 import com.movtery.zalithlauncher.ui.subassembly.filelist.FileSelectedListener
+import com.movtery.zalithlauncher.ui.subassembly.filelist.ModIconStore
 import com.movtery.zalithlauncher.ui.subassembly.view.SearchViewWrapper
 import com.movtery.zalithlauncher.utils.NewbieGuideUtils
 import com.movtery.zalithlauncher.utils.ZHTools
@@ -410,6 +411,12 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                     else
                         View.GONE
 
+                copyLinksButton.visibility =
+                    if (isChecked)
+                        View.VISIBLE
+                    else
+                        View.GONE
+
                 fileRecyclerView
                     .adapter
                     .setMultiSelectMode(
@@ -571,6 +578,10 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
                 }
             }
 
+            copyLinksButton.setOnClickListener {
+                copySelectedModLinks()
+            }
+
             goDownloadText.setOnClickListener {
                 goDownloadMod()
             }
@@ -685,6 +696,99 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
         }
     }
 
+    /**
+     * Copies the page link of every selected mod, one under another,
+     * in the order they were selected.
+     */
+    private fun copySelectedModLinks() {
+        val files =
+            binding.fileRecyclerView
+                .adapter
+                .getSelectedFiles()
+                .mapNotNull { it.file }
+                .filter { it.isFile && ModIconStore.isModJar(it) }
+
+        if (files.isEmpty()) {
+            Toast.makeText(
+                requireContext(),
+                "لم يتم تحديد أي مود",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        Toast.makeText(
+            requireContext(),
+            "جاري جلب الروابط...",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        Task.runTask {
+            ModIconStore.lookupPageLinks(files)
+        }.ended(
+            TaskExecutors.getAndroidUI()
+        ) { links ->
+
+            val ordered = files.mapNotNull { links?.get(it) }
+            val missing = files.filter { links?.get(it) == null }
+
+            if (ordered.isEmpty()) {
+                Toast.makeText(
+                    requireContext(),
+                    "لم يتم العثور على أي من المودات المحددة (${missing.size} مفقود)",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@ended
+            }
+
+            val clipboard =
+                requireContext()
+                    .getSystemService(
+                        android.content.ClipboardManager::class.java
+                    )
+
+            clipboard.setPrimaryClip(
+                android.content.ClipData.newPlainText(
+                    "Mod links",
+                    ordered.joinToString("\n")
+                )
+            )
+
+            val message =
+                if (missing.isEmpty())
+                    "تم نسخ ${ordered.size} رابط"
+                else
+                    "تم نسخ ${ordered.size} رابط\n" + describeMissingMods(missing)
+
+            Toast.makeText(
+                requireContext(),
+                message,
+                Toast.LENGTH_LONG
+            ).show()
+        }.onThrowable { error ->
+
+            Toast.makeText(
+                requireContext(),
+                "فشل جلب الروابط",
+                Toast.LENGTH_LONG
+            ).show()
+
+            Tools.showErrorRemote(error)
+        }.execute()
+    }
+
+    /** Says which selected mods were not found on Modrinth or CurseForge. */
+    private fun describeMissingMods(missing: List<File>): String {
+        val shown = missing.take(3).joinToString("\n") { "- ${it.name}" }
+        val more =
+            if (missing.size > 3) "\nو${missing.size - 3} آخرين" else ""
+
+        return if (missing.size == 1)
+            "مود واحد لم يتم العثور عليه:\n$shown"
+        else
+            "${missing.size} مودات لم يتم العثور عليها:\n$shown$more"
+    }
+
     private fun startNewbieGuide() {
         if (NewbieGuideUtils.showOnlyOne(TAG)) {
             return
@@ -768,6 +872,9 @@ class ModsFragment : FragmentWithAnim(R.layout.fragment_mods) {
             operateView
                 .copySelectedButton
                 .visibility =
+                View.GONE
+
+            copyLinksButton.visibility =
                 View.GONE
         }
     }
