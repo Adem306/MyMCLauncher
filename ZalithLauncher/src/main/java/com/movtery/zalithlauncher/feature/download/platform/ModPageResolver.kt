@@ -5,6 +5,7 @@ import com.movtery.zalithlauncher.feature.download.enums.Platform
 import com.movtery.zalithlauncher.feature.download.item.InfoItem
 import com.movtery.zalithlauncher.feature.download.platform.curseforge.CurseForgeCommonUtils
 import com.movtery.zalithlauncher.feature.download.platform.modrinth.ModrinthCommonUtils
+import com.movtery.zalithlauncher.ui.subassembly.filelist.ModAvailabilityChecker
 import com.movtery.zalithlauncher.ui.subassembly.filelist.ModIconStore
 import java.io.File
 
@@ -26,7 +27,8 @@ object ModPageResolver {
     }
 
     private fun resolveModrinth(file: File): InfoItem? {
-        val projectId = ModIconStore.findModrinthProjectId(file)
+        val projectId = ModAvailabilityChecker.get(file)?.modrinthId
+            ?: ModIconStore.findModrinthProjectId(file)
             ?: return null
 
         return ModrinthCommonUtils.getInfo(
@@ -37,13 +39,18 @@ object ModPageResolver {
     }
 
     private fun resolveCurseForge(file: File): InfoItem? {
-        val modId = ModIconStore.findCurseForgeModId(file)
+        val modId = ModAvailabilityChecker.get(file)?.curseForgeId
+            ?: ModIconStore.findCurseForgeModId(file)
             ?: return null
 
-        val data = CurseForgeCommonUtils.searchModFromID(
+        // searchModFromID returns the whole response: { "data": { ...mod... } }
+        val root = CurseForgeCommonUtils.searchModFromID(
             Platform.CURSEFORGE.helper.api,
             modId.toString()
         ) ?: return null
+
+        // getInfoItem expects the inner "data" object, not the whole response
+        val data = root.getAsJsonObject("data") ?: return null
 
         return CurseForgeCommonUtils.getInfoItem(
             data,
