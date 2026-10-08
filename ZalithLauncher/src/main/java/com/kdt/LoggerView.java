@@ -54,16 +54,19 @@ public class LoggerView extends ConstraintLayout {
     private static class Entry {
         final String text;
         final int type;
+        final boolean head; // true = start of a new error (not a stack-trace continuation)
 
-        Entry(String text, int type) {
+        Entry(String text, int type, boolean head) {
             this.text = text;
             this.type = type;
+            this.head = head;
         }
     }
 
     private final List<Entry> mEntries = new ArrayList<>();
     private boolean mProblemsOnly = false;
     private int mLastType = TYPE_NORMAL;
+    private boolean mLastContinuation = false;
 
     public LoggerView(@NonNull Context context) {
         this(context, null);
@@ -126,6 +129,7 @@ public class LoggerView extends ConstraintLayout {
                         binding.logView.setText("");
                         mEntries.clear();
                         mLastType = TYPE_NORMAL;
+                        mLastContinuation = false;
                         Logger.setLogListener(null); // Makes the JNI code be able to skip expensive logger callbacks
                         // NOTE: was tested by rapidly smashing the log on/off button, no sync issues found :)
                     }
@@ -159,15 +163,20 @@ public class LoggerView extends ConstraintLayout {
         mLogListener = text -> {
             if (binding.logView.getVisibility() != VISIBLE) return;
             post(() -> {
-                Entry entry = new Entry(text, classify(text));
-                mEntries.add(entry);
+                boolean needRebuild = false;
+                for (String line : text.split("\\r?\\n")) {
+                    int type = classify(line);
+                    Entry entry = new Entry(line, type, type == TYPE_ERROR && !mLastContinuation);
+                    mEntries.add(entry);
 
-                if (mEntries.size() > MAX_LINES) {
-                    mEntries.subList(0, TRIM_LINES).clear();
-                    rebuildText();
-                } else if (!mProblemsOnly || isProblem(entry)) {
-                    binding.logView.append(buildLine(entry));
+                    if (mEntries.size() > MAX_LINES) {
+                        mEntries.subList(0, TRIM_LINES).clear();
+                        needRebuild = true;
+                    } else if (!needRebuild && (!mProblemsOnly || isProblem(entry))) {
+                        binding.logView.append(buildLine(entry));
+                    }
                 }
+                if (needRebuild) rebuildText();
 
                 if (binding.scroll.isKeepFocusing())
                     binding.scroll.fullScroll(View.FOCUS_DOWN);
@@ -200,6 +209,9 @@ public class LoggerView extends ConstraintLayout {
     private void copyCurrentView() {
         StringBuilder sb = new StringBuilder();
         boolean truncated = false;
+        int lines = 0;
+        int errors = 0;
+        int warnings = 0;
 
         for (int i = mEntries.size() - 1; i >= 0; i--) {
             Entry entry = mEntries.get(i);
@@ -209,10 +221,13 @@ public class LoggerView extends ConstraintLayout {
                 break;
             }
             sb.insert(0, entry.text + '\n');
+            if (!entry.text.trim().isEmpty()) lines++;
+            if (entry.type == TYPE_ERROR && entry.head) errors++;
+            if (entry.type == TYPE_WARN) warnings++;
         }
 
         Context context = getContext();
-        if (sb.length() == 0) {
+        if (sb.length() == 0 || (mProblemsOnly && errors == 0 && warnings == 0)) {
             Toast.makeText(context, "لا يوجد ما يُنسخ", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -221,7 +236,16 @@ public class LoggerView extends ConstraintLayout {
             ClipboardManager clipboard =
                     (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
             clipboard.setPrimaryClip(ClipData.newPlainText("Log", sb.toString()));
-            String message = mProblemsOnly ? "تم نسخ الأخطاء" : "تم نسخ السجل كاملًا";
+
+            String message;
+            if (mProblemsOnly) {
+                message = "تم نسخ ";
+                if (errors > 0) message += errors + " خطأ";
+                if (errors > 0 && warnings > 0) message += " و";
+                if (warnings > 0) message += warnings + " تحذير";
+            } else {
+                message = "تم نسخ " + lines + " سطر";
+            }
             if (truncated) message += " (آخر الأسطر فقط، السجل كبير)";
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
         } catch (Throwable t) {
@@ -261,14 +285,17 @@ public class LoggerView extends ConstraintLayout {
         String upper = text.toUpperCase(Locale.ROOT);
         String trimmed = text.trim();
         int type;
+        boolean continuation = false;
 
-        if (upper.contains("/ERROR]") || upper.contains("/FATAL]")
-                || upper.contains("EXCEPTION") || trimmed.startsWith("Caused by")
-                || upper.contains("MALFORMEDJSON") || upper.contains("FATAL")) {
+        if (mLastType == TYPE_ERROR
+                && (trimmed.isEmpty() || trimmed.startsWith("at ") || trimmed.startsWith("...")
+                || trimmed.startsWith("Suppressed:") || trimmed.startsWith("Caused by"))) {
+            // Part of the same error (stack trace); a blank line inside it keeps the error alive
             type = TYPE_ERROR;
-        } else if (mLastType == TYPE_ERROR
-                && (trimmed.startsWith("at ") || trimmed.startsWith("...")
-                || trimmed.startsWith("Suppressed:"))) {
+            continuation = true;
+        } else if (upper.contains("/ERROR]") || upper.contains("/FATAL]")
+                || upper.contains("EXCEPTION") || upper.contains("MALFORMEDJSON")
+                || upper.contains("FATAL")) {
             type = TYPE_ERROR;
         } else if (upper.contains("/WARN]") || upper.contains("[WARN]")) {
             type = TYPE_WARN;
@@ -281,6 +308,7 @@ public class LoggerView extends ConstraintLayout {
         }
 
         mLastType = type;
+        mLastContinuation = continuation;
         return type;
     }
 
